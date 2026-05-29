@@ -51,3 +51,14 @@ The dataset tracks several critical parameters:
 ```bash
    git clone [https://github.com/Anmol-0774/Mortality-Analysis.git](https://github.com/Anmol-0774/Mortality-Analysis.git)
    cd mortality_analysis
+```
+2. **Run the Flutter App:**
+
+```bash
+   # Get packages
+   flutter pub get
+``` 
+   # Run on connected device
+```bash
+   flutter run
+```
