@@ -1,8 +1,10 @@
+// ignore_for_file: use_super_parameters
 import 'package:flutter/material.dart';
+import 'package:mortality_analysis/screens/dashboard_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'signup_screen.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'data_form_screen.dart';
-import 'admin_dashboard_screen.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,6 +23,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final _adminPasswordController = TextEditingController();
 
   bool _isLoading = false;
+
+  // Global Engine instance initialized to pass down to dashboards and filter systems safely
+
 
   // 1. فیلڈ ورکر لاگ ان لاجک (بغیر کسی ایڈمن رسائی کے)
   Future<void> _loginAsWorker() async {
@@ -57,6 +62,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } on AuthException catch (e) {
       _showSnackBar(e.message, Colors.red);
+    } catch (e) {
+      _showSnackBar(e.toString(), Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -87,9 +94,11 @@ class _LoginScreenState extends State<LoginScreen> {
         // سخت چیک: صرف مخصوص ایڈمن ای میل کو ہی ڈیش بورڈ کی اجازت ہوگی
         if (loggedInEmail == 'admin@mortality.com') {
           Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const AdminDashboardScreen())
-          );
+  context,
+  MaterialPageRoute(
+    builder: (context) =>  DashboardScreen(),
+  ),
+);
         } else {
           // اگر کوئی عام فیلڈ ورکر ایڈمن پینل ہیک کرنے یا لاگ ان کرنے کی کوشش کرے
           await Supabase.instance.client.auth.signOut();
@@ -98,6 +107,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } on AuthException catch (e) {
       _showSnackBar(e.message, Colors.red);
+    } catch (e) {
+      _showSnackBar(e.toString(), Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -298,6 +309,40 @@ class _LoginScreenState extends State<LoginScreen> {
             )
           ],
         ),
+      ),
+    );
+  }
+}
+class DashboardWebViewScreen extends StatefulWidget {
+  const DashboardWebViewScreen({super.key});
+
+  @override
+  State<DashboardWebViewScreen> createState() =>
+      _DashboardWebViewScreenState();
+}
+
+class _DashboardWebViewScreenState
+    extends State<DashboardWebViewScreen> {
+  late final WebViewController controller;
+
+  @override
+  void initState() {
+    super.initState();
+
+    controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..loadFlutterAsset('assets/dashboard.html');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Mortality Analytics Dashboard'),
+        backgroundColor: Colors.indigo,
+      ),
+      body: WebViewWidget(
+        controller: controller,
       ),
     );
   }
