@@ -396,6 +396,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
+            // ignore: deprecated_member_use
             color: _T.purple.withOpacity(0.1),
             borderRadius: BorderRadius.circular(999),
             border: Border.all(color: _T.purple.withOpacity(0.3)),

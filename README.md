@@ -58,7 +58,7 @@ The dataset tracks several critical parameters:
    # Get packages
    flutter pub get
 ``` 
-   # Run on connected device
+# Run on connected device
 ```bash
    flutter run
 ```

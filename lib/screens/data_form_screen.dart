@@ -265,9 +265,17 @@ class _DataFormScreenState extends State<DataFormScreen> {
 
     try {
       await Supabase.instance.client.from("mortality_records").insert(record);
-      _show("Saved directly to Cloud Storage", Colors.green.shade700);
-      _resetForm();
-      syncOfflineRecords();
+
+_show("Saved directly to Cloud Storage", Colors.green.shade700);
+
+_resetForm();
+
+// 🔥 IMPORTANT: force list refresh if you're using another screen
+if (mounted) {
+  setState(() {});
+}
+
+syncOfflineRecords();
     } catch (supabaseError) {
       await _offlineBox.add(record);
       _show("Saved Offline (Cloud write error protection active)", Colors.orange.shade800);

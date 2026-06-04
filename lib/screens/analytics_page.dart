@@ -1,4 +1,4 @@
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -17,6 +17,7 @@ class _TD { final String year; final double count; _TD(this.year, this.count); }
 class _T {
   static const bg      = Color(0xFF0F172A);
   static const surface = Color(0xFF1E293B);
+  // ignore: unused_field
   static const card    = Color(0xFF1E293B);
   static const border  = Color(0xFF334155);
   static const muted   = Color(0xFF94A3B8);
