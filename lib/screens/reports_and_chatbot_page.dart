@@ -1,24 +1,19 @@
 import 'dart:convert';
-import 'dart:io';
-
+import 'package:share_plus/share_plus.dart';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
-
+import 'dart:typed_data';
 import 'package:excel/excel.dart' as ex;
-
 import 'package:pdf/widgets.dart' as pw;
-
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 // ═══════════════════════════════════════════════════════
 //  ⚠ IMPORTANT: Replace with your actual API key
 //  Get it free from: https://console.anthropic.com
 // ═══════════════════════════════════════════════════════
-const _kGroqKey = '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';
-
-// ═══════════════════════════════════════════════════════
-//  THEME
+final _kGroqKey = dotenv.env['GROQ_API_KEY'] ?? '';
 // ═══════════════════════════════════════════════════════
 class _T {
   static const bg      = Color(0xFF0F172A);
@@ -399,102 +394,48 @@ class _ReportsTabState extends State<_ReportsTab> {
       ),
     );
   }
+
+
+
 Future<void> exportToExcel() async {
   final excel = ex.Excel.createExcel();
-  final sheet = excel['Mortality Report'];
+  final sheet = excel['Report'];
 
-  // 🟢 Headers
   sheet.appendRow([
-    ex.TextCellValue("Metric"),
-    ex.TextCellValue("Value"),
-  ]);
-
-  // 🟢 Summary Data
-  sheet.appendRow([
-    ex.TextCellValue("Total Records"),
+    ex.TextCellValue("Total"),
     ex.TextCellValue("$_total"),
   ]);
 
-  sheet.appendRow([
-    ex.TextCellValue("Male"),
-    ex.TextCellValue("$_maleCount"),
-  ]);
+  final bytes = excel.encode();
+  if (bytes == null) return;
 
-  sheet.appendRow([
-    ex.TextCellValue("Female"),
-    ex.TextCellValue("$_femaleCount"),
-  ]);
-
-  sheet.appendRow([
-    ex.TextCellValue("Average Age"),
-    ex.TextCellValue(_avgAge.toStringAsFixed(1)),
-  ]);
-
-  sheet.appendRow([
-    ex.TextCellValue("Top Cause"),
-    ex.TextCellValue(_topCause),
-  ]);
-
-  sheet.appendRow([
-    ex.TextCellValue("Top District"),
-    ex.TextCellValue(_topDistrict),
-  ]);
-
-  sheet.appendRow([
-    ex.TextCellValue("Top Locality"),
-    ex.TextCellValue(_topLocality),
-  ]);
-
-  // 🟡 Save file
-  final dir = await getApplicationDocumentsDirectory();
-  final file = File("${dir.path}/mortality_report.xlsx");
-
-  await file.writeAsBytes(excel.encode()!);
-
-  // 🟢 Share file
-  await Share.shareXFiles(
-    [XFile(file.path)],
-    text: "Mortality Excel Report",
+  final file = XFile.fromData(
+    Uint8List.fromList(bytes),
+    name: "mortality_report.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
-}
 
+  await Share.shareXFiles([file], text: "Excel Report");
+}
 
 Future<void> exportToPdf() async {
   final pdf = pw.Document();
 
   pdf.addPage(
     pw.Page(
-      build: (context) => pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text("MORTALITY ANALYSIS REPORT",
-              style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 10),
-
-          pw.Text("Total Records: $_total"),
-          pw.Text("Male: $_maleCount"),
-          pw.Text("Female: $_femaleCount"),
-          pw.Text("Average Age: ${_avgAge.toStringAsFixed(1)}"),
-          pw.Text("Top Cause: $_topCause"),
-          pw.Text("Top District: $_topDistrict"),
-
-          pw.SizedBox(height: 20),
-          pw.Text("TOP CAUSES:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-
-          ..._causeMap.entries.take(10).map((e) =>
-            pw.Text("${e.key}: ${e.value}")
-          ),
-        ],
-      ),
+      build: (_) => pw.Text("Mortality Report"),
     ),
   );
 
-  final dir = await getApplicationDocumentsDirectory();
-  final file = File("${dir.path}/mortality_report.pdf");
+  final bytes = await pdf.save();
 
-  await file.writeAsBytes(await pdf.save());
+  final file = XFile.fromData(
+    bytes,
+    name: "mortality_report.pdf",
+    mimeType: "application/pdf",
+  );
 
-  await Share.shareXFiles([XFile(file.path)], text: "Mortality Report PDF");
+  await Share.shareXFiles([file], text: "PDF Report");
 }
   @override
   Widget build(BuildContext context) {
@@ -555,7 +496,6 @@ Future<void> exportToPdf() async {
     spacing: 12,
     runSpacing: 12,
     children: [
-
       // 📊 REAL EXCEL EXPORT
  _exportBtn(
   Icons.table_chart_rounded,
