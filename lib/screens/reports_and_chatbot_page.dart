@@ -9,16 +9,13 @@ import 'dart:typed_data';
 import 'package:excel/excel.dart' as ex;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
-// ═══════════════════════════════════════════════════════
-//  ⚠ IMPORTANT: Replace with your actual API key
-//  Get it free from: https://console.anthropic.com
-// ═══════════════════════════════════════════════════════
-final _kGroqKey = dotenv.env['GROQ_API_KEY'] ?? '';
-// ═══════════════════════════════════════════════════════
+
+
+// final _kGroqKey = dotenv.env['GROQ_API_KEY'] ?? '';
+
 class _T {
   static const bg      = Color(0xFF0F172A);
   static const surface = Color(0xFF1E293B);
-  // ignore: unused_field
   static const surface2= Color(0xFF243044);
   static const border  = Color(0xFF334155);
   static const muted   = Color(0xFF94A3B8);
