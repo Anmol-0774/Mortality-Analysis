@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -124,13 +126,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     final loc = _localityCtrl.text.trim().toLowerCase();
     _filtered = _allData.where((r) {
       if (_selDistrict != null && _selDistrict!.isNotEmpty &&
-          r['district'] != _selDistrict) return false;
+          r['district'] != _selDistrict) {
+        return false;
+      }
       if (loc.isNotEmpty &&
-          !(r['specific_locality']?.toString().toLowerCase() ?? '').contains(loc))
+          !(r['specific_locality']?.toString().toLowerCase() ?? '').contains(loc)) {
         return false;
+      }
       if (_selYear != null && _selYear!.isNotEmpty &&
-          !(r['date_of_death']?.toString() ?? '').startsWith(_selYear!))
+          !(r['date_of_death']?.toString() ?? '').startsWith(_selYear!)) {
         return false;
+      }
       return true;
     }).toList();
 
@@ -200,8 +206,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     final bins = {'0–17': 0, '18–34': 0, '35–49': 0, '50–64': 0, '65+': 0};
     for (final r in _filtered) {
       final a = r['age']; if (a == null || a <= 0) continue;
-      if (a < 18) bins['0–17'] = bins['0–17']! + 1;
-      else if (a < 35) bins['18–34'] = bins['18–34']! + 1;
+      if (a < 18) {
+        bins['0–17'] = bins['0–17']! + 1;
+      } else if (a < 35) bins['18–34'] = bins['18–34']! + 1;
       else if (a < 50) bins['35–49'] = bins['35–49']! + 1;
       else if (a < 65) bins['50–64'] = bins['50–64']! + 1;
       else bins['65+'] = bins['65+']! + 1;
@@ -280,8 +287,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         if (r['cause_of_death'] != _trendDisease) return false;
         if (!(r['date_of_death']?.toString() ?? '').startsWith(y)) return false;
         if (loc.isNotEmpty &&
-            !(r['specific_locality']?.toString().toLowerCase() ?? '').contains(loc))
+            !(r['specific_locality']?.toString().toLowerCase() ?? '').contains(loc)) {
           return false;
+        }
         return true;
       }).length;
       return _TD(y, count.toDouble());
@@ -413,6 +421,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
+                  // ignore: duplicate_ignore
+                  // ignore: deprecated_member_use
                   color: _T.accent.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(color: _T.accent.withOpacity(0.3)),
@@ -433,7 +443,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _filterDrop(String hint, List<String> options, String? val, void Function(String?) onChange) {
     return DropdownButtonFormField<String>(
-      value: val,
+      initialValue: val,
       dropdownColor: _T.surface,
       style: const TextStyle(color: _T.text, fontSize: 12),
       decoration: _deco(hint),
@@ -1008,7 +1018,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         LayoutBuilder(builder: (ctx, box) {
           final wide = box.maxWidth > 500;
           final diseaseField = DropdownButtonFormField<String>(
-            value: _trendDisease,
+            initialValue: _trendDisease,
             dropdownColor: _T.surface,
             style: const TextStyle(color: _T.text, fontSize: 12),
             decoration: _deco('Select Disease'),

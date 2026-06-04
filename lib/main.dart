@@ -15,10 +15,9 @@ Future<void> main() async {
   await Hive.openBox('offline_records');
 
   await Supabase.initialize(
-    url: 'https://qhgjwjrdlclksmddpijk.supabase.co',
+    url: 'https://jpnjovhobwqmhebfydkz.supabase.co',
     anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoZ2p3anJkbGNsa3NtZGRwaWprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNTU2NjQsImV4cCI6MjA5MTgzMTY2NH0.muDLOM5SE_lHlWICzGCqyGgnahFOs-SjJIIqzVy5hSw',
-  );
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpwbmpvdmhvYndxbWhlYmZ5ZGt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NjQ1OTIsImV4cCI6MjA5NjA0MDU5Mn0.aiDX2NTNPU7BndHnLlYxmpEi6dNizegMYofQLo5POkU');
 
   runApp(const MyApp());
 }

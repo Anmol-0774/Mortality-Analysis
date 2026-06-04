@@ -110,8 +110,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
       final res = await _sb
           .from('mortality_records_clean')
           .select('specific_locality, district, age, water_source, '
-              'prior_medical_conditions, is_valid, quality_score')
-          .eq('is_valid', true)
+              'prior_medical_conditions, quality_score')
           .gte('quality_score', 60)
           .limit(10000);
 
@@ -262,7 +261,9 @@ class _ClusteringPageState extends State<ClusteringPage> {
 
   double _euclidean(List<double> a, List<double> b) {
     double sum = 0;
-    for (int i = 0; i < a.length; i++) sum += pow(a[i] - b[i], 2);
+    for (int i = 0; i < a.length; i++) {
+      sum += pow(a[i] - b[i], 2);
+    }
     return sqrt(sum);
   }
 
@@ -273,7 +274,9 @@ class _ClusteringPageState extends State<ClusteringPage> {
     _filtered = _points.where((p) {
       if (_selDistrict != null && _selDistrict!.isNotEmpty && p.district != _selDistrict) return false;
       if (_selCluster != null && _selCluster!.isNotEmpty &&
-          _clusterNames[p.cluster] != _selCluster) return false;
+          _clusterNames[p.cluster] != _selCluster) {
+        return false;
+      }
       return true;
     }).toList();
     setState(() => _loading = false);
@@ -429,7 +432,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
 
   Widget _drop(String hint, List<String> opts, String? val, void Function(String?) onChange) =>
       DropdownButtonFormField<String>(
-        value: val, dropdownColor: _T.surface,
+        initialValue: val, dropdownColor: _T.surface,
         style: const TextStyle(color: _T.text, fontSize: 12),
         decoration: InputDecoration(
           hintText: 'All $hint', hintStyle: const TextStyle(color: _T.muted, fontSize: 12),

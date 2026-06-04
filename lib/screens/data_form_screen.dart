@@ -213,7 +213,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
       final Map<String, dynamic> strictRecord = Map<String, dynamic>.from(rawRecord);
 
       try {
-        await Supabase.instance.client.from("death_data").insert(strictRecord);
+        await Supabase.instance.client.from("mortality_records").insert(strictRecord);
         await _offlineBox.delete(key);
       } catch (e) {
         print("🚨 OFFLINE SYNC TIMED OUT OR REJECTED: $e");
@@ -264,7 +264,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
     setState(() => _isSaving = true);
 
     try {
-      await Supabase.instance.client.from("death_data").insert(record);
+      await Supabase.instance.client.from("mortality_records").insert(record);
       _show("Saved directly to Cloud Storage", Colors.green.shade700);
       _resetForm();
       syncOfflineRecords();
@@ -543,7 +543,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
     final bool validValue = value != null && items.contains(value);
 
     return DropdownButtonFormField<String>(
-      value: validValue ? value : null,
+      initialValue: validValue ? value : null,
       decoration: InputDecoration(
         labelText: label,
         hintText: hintText,

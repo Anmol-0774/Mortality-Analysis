@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mortality_analysis/screens/clustering_page.dart';
+import 'package:mortality_analysis/screens/reports_and_chatbot_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -23,6 +24,7 @@ class _T {
   static const purple  = Color(0xFF818CF8);
   static const orange  = Color(0xFFFB923C);
   static const red     = Color(0xFFF87171);
+  static const pink    = Color(0xFFF472B6);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -41,11 +43,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _webViewLoading = true;
 
   // Stats
-  int _totalRecords = 0;
-  int _validRecords = 0;
-  int _flaggedRecords = 0;
-  double _avgQuality = 0;
-  bool _statsLoading = true;
+  int    _totalRecords  = 0;
+  int    _validRecords  = 0;
+  int    _flaggedRecords = 0;
+  double _avgQuality    = 0;
+  bool   _statsLoading  = true;
 
   @override
   void initState() {
@@ -55,39 +57,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // ─────────────────────────────────────────────
-  //  LOAD STATS FROM SUPABASE
+  //  LOAD STATS
   // ─────────────────────────────────────────────
-  Future<void> _loadStats() async {
-    setState(() => _statsLoading = true);
-    try {
-      final res = await _sb
-          .from('mortality_records_clean')
-          .select('is_valid, quality_score');
+Future<void> _loadStats() async {
+  setState(() => _statsLoading = true);
 
-      final data = List<Map<String, dynamic>>.from(res as List);
-      final valid = data.where((r) => r['is_valid'] == true).length;
-      final flagged = data.where((r) => r['is_valid'] == false).length;
-      final scores = data
-          .map((r) => r['quality_score'])
-          .whereType<int>()
-          .toList();
-      final avg = scores.isEmpty
-          ? 0.0
-          : scores.reduce((a, b) => a + b) / scores.length;
+  try {
+    final res = await _sb
+        .from('mortality_records_clean')
+        .select('quality_score'); // ❌ removed is_valid
 
-      setState(() {
-        _totalRecords = data.length;
-        _validRecords = valid;
-        _flaggedRecords = flagged;
-        _avgQuality = avg;
-        _statsLoading = false;
-      });
-    } catch (e) {
-      setState(() => _statsLoading = false);
-      debugPrint('Stats error: $e');
-    }
+    final data = List<Map<String, dynamic>>.from(res as List);
+
+    final scores = data
+        .map((r) => r['quality_score'])
+        .whereType<num>() // safer than int
+        .toList();
+
+    final avg = scores.isEmpty
+        ? 0.0
+        : scores.reduce((a, b) => a + b) / scores.length;
+
+    setState(() {
+      _totalRecords = data.length;
+
+      _validRecords = 0;     // ❌ removed is_valid logic
+      _flaggedRecords = 0;   // ❌ removed is_valid logic
+
+      _avgQuality = avg;
+      _statsLoading = false;
+    });
+  } catch (e) {
+    setState(() => _statsLoading = false);
+    debugPrint('Stats error: $e');
   }
-
+}
+  // ─────────────────────────────────────────────
+  //  LOAD HTML (mobile only)
+  // ─────────────────────────────────────────────
   Future<void> _loadHtml() async {
     try {
       final html = await rootBundle.loadString('assets/dashboard.html');
@@ -103,6 +110,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       debugPrint('WebView error: $e');
     }
   }
+
+  // ─────────────────────────────────────────────
+  //  NAVIGATION HELPERS
+  // ─────────────────────────────────────────────
+  void _go(Widget page) => Navigator.push(context, MaterialPageRoute(builder: (_) => page));
 
   // ─────────────────────────────────────────────
   //  LOGOUT
@@ -126,29 +138,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       (route) => false,
     );
   }
-Widget _actionBtn({
-  required IconData icon,
-  required String label,
-  required Color color,
-  required VoidCallback onTap,
-}) {
-  return ElevatedButton.icon(
-    onPressed: onTap,
-    icon: Icon(icon, size: 16, color: color),
-    label: Text(label),
-    style: ElevatedButton.styleFrom(
-      backgroundColor: color.withOpacity(0.08),
-      foregroundColor: color,
-      elevation: 0,
-      side: BorderSide(color: color.withOpacity(0.3)),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-    ),
-  );
-}
+
   // ─────────────────────────────────────────────
   //  CHANGE PASSWORD
   // ─────────────────────────────────────────────
@@ -183,9 +173,7 @@ Widget _actionBtn({
       decoration: BoxDecoration(
         color: _T.surface,
         border: Border(bottom: BorderSide(color: _T.border)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 16, offset: const Offset(0, 4))
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 16, offset: const Offset(0, 4))],
       ),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
       child: Row(children: [
@@ -204,60 +192,36 @@ Widget _actionBtn({
         ),
         const SizedBox(width: 12),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Mortality Analysis',
-              style: TextStyle(color: _T.text, fontWeight: FontWeight.bold, fontSize: 16)),
-          Text('Admin Panel', style: TextStyle(color: _T.muted, fontSize: 11)),
+          const Text('Mortality Analysis', style: TextStyle(color: _T.text, fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text('Admin Panel', style: TextStyle(color: _T.muted, fontSize: 11)),
         ]),
-
         const Spacer(),
-
-        // Admin info
+        // Admin chip
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: _T.bg,
-            borderRadius: BorderRadius.circular(999),
+            color: _T.bg, borderRadius: BorderRadius.circular(999),
             border: Border.all(color: _T.border),
           ),
           child: Row(children: [
             Container(
               width: 28, height: 28,
-              decoration: BoxDecoration(
-                color: _T.accent.withOpacity(0.15),
-                shape: BoxShape.circle,
-              ),
+              decoration: BoxDecoration(color: _T.accent.withOpacity(0.15), shape: BoxShape.circle),
               child: const Icon(Icons.person_rounded, color: _T.accent, size: 16),
             ),
             const SizedBox(width: 8),
-            Text(email,
-                style: const TextStyle(color: _T.sub, fontSize: 12),
-                overflow: TextOverflow.ellipsis),
+            Text(email, style: const TextStyle(color: _T.sub, fontSize: 12), overflow: TextOverflow.ellipsis),
           ]),
         ),
         const SizedBox(width: 10),
-
-        // Change Password
-        _topBtn(
-          icon: Icons.lock_reset_rounded,
-          label: 'Password',
-          color: _T.purple,
-          onTap: _showChangePassword,
-        ),
+        _topBtn(icon: Icons.lock_reset_rounded, label: 'Password', color: _T.purple, onTap: _showChangePassword),
         const SizedBox(width: 8),
-
-        // Logout
-        _topBtn(
-          icon: Icons.logout_rounded,
-          label: 'Logout',
-          color: _T.red,
-          onTap: _logout,
-        ),
+        _topBtn(icon: Icons.logout_rounded, label: 'Logout', color: _T.red, onTap: _logout),
       ]),
     );
   }
 
-  Widget _topBtn({required IconData icon, required String label,
-      required Color color, required VoidCallback onTap}) =>
+  Widget _topBtn({required IconData icon, required String label, required Color color, required VoidCallback onTap}) =>
       TextButton.icon(
         onPressed: onTap,
         icon: Icon(icon, size: 16, color: color),
@@ -271,170 +235,73 @@ Widget _actionBtn({
       );
 
   // ─────────────────────────────────────────────
-  //  WEB BODY (Flutter native — no WebView)
+  //  WEB BODY
   // ─────────────────────────────────────────────
-Widget _buildWebBody() {
-  return SingleChildScrollView(
-    padding: const EdgeInsets.all(24),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+  Widget _buildWebBody() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-        // Welcome banner (unchanged)
+        // ── Welcome Banner
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                _T.accent.withOpacity(0.15),
-                _T.purple.withOpacity(0.10)
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              colors: [_T.accent.withOpacity(0.15), _T.purple.withOpacity(0.10)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: _T.accent.withOpacity(0.2)),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Welcome back, Admin 👋',
-                      style: TextStyle(
-                        color: _T.text,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Mortality Analysis System — Admin Control Panel',
-                      style: TextStyle(color: _T.muted, fontSize: 13),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 🔵 Analytics Button (existing)
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const AnalyticsPage(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.bar_chart_rounded, size: 18),
-                      label: const Text('Open Analytics Dashboard'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _T.accent,
-                        foregroundColor: _T.bg,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        textStyle: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // 🔥 NEW ROW OF ACTION BUTTONS
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-
-                        // 📊 Clustering
-                        _actionBtn(
-                          icon: Icons.auto_graph_rounded,
-                          label: "Clustering",
-                          color: _T.purple,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ClusteringPage(),
-                              ),
-                            );
-                          },
-                        ),
-
-                      //   // 📄 Reports
-                      //   _actionBtn(
-                      //     icon: Icons.description_rounded,
-                      //     label: "Reports",
-                      //     color: _T.orange,
-                      //     onTap: () {
-                      //       Navigator.push(
-                      //         context,
-                      //         MaterialPageRoute(
-                      //           builder: (_) => const ReportPage(),
-                      //         ),
-                      //       );
-                      //     },
-                      //   ),
-
-                      //   // 🤖 AI Chat
-                      //   _actionBtn(
-                      //     icon: Icons.smart_toy_rounded,
-                      //     label: "AI Chat",
-                      //     color: _T.green,
-                      //     onTap: () {
-                      //       Navigator.push(
-                      //         context,
-                      //         MaterialPageRoute(
-                      //           builder: (_) => const AIChatPage(),
-                      //         ),
-                      //       );
-                      //     },
-                      //   ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(width: 20),
-              Icon(
-                Icons.analytics_rounded,
-                size: 72,
-                color: _T.accent.withOpacity(0.3),
-              ),
-            ],
-          ),
+          child: Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Welcome back, Admin 👋',
+                  style: TextStyle(color: _T.text, fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              const Text('Mortality Analysis System — Admin Control Panel',
+                  style: TextStyle(color: _T.muted, fontSize: 13)),
+              const SizedBox(height: 16),
+              Wrap(spacing: 10, runSpacing: 10, children: [
+                _bannerBtn(Icons.bar_chart_rounded,      'Analytics',    _T.accent,  () => _go(const AnalyticsPage())),
+                _bannerBtn(Icons.hub_rounded,            'Clustering',   _T.purple,  () => _go(ClusteringPage())),
+                _bannerBtn(Icons.summarize_rounded,      'Reports & AI', _T.orange,  () => _go(const ReportsAndChatbotPage())),
+              ]),
+            ])),
+            const SizedBox(width: 20),
+            Icon(Icons.analytics_rounded, size: 72, color: _T.accent.withOpacity(0.25)),
+          ]),
         ),
-
         const SizedBox(height: 24),
 
-        // Stats row
+        // ── Stats Row
         _buildStatsRow(),
         const SizedBox(height: 24),
 
-        // Menu cards
-        const Text(
-          'Quick Actions',
-          style: TextStyle(
-            color: _T.muted,
-            fontSize: 11,
-            letterSpacing: 1.5,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        // ── Menu Grid
+        const Text('Quick Actions', style: TextStyle(color: _T.muted, fontSize: 11, letterSpacing: 1.5, fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
-
         _buildMenuGrid(),
-      ],
-    ),
-  );
-}
+      ]),
+    );
+  }
+
+  Widget _bannerBtn(IconData icon, String label, Color color, VoidCallback onTap) =>
+      ElevatedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 16),
+        label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: _T.bg,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          elevation: 0,
+        ),
+      );
+
   // ─────────────────────────────────────────────
-  //  MOBILE BODY (WebView for dashboard.html)
+  //  MOBILE BODY
   // ─────────────────────────────────────────────
   Widget _buildMobileBody() {
     if (_controller == null) {
@@ -443,73 +310,76 @@ Widget _buildWebBody() {
     return Stack(children: [
       WebViewWidget(controller: _controller!),
       if (_webViewLoading)
-        Container(
-          color: _T.bg,
-          child: const Center(child: CircularProgressIndicator(color: _T.accent)),
-        ),
-      // Floating analytics button for mobile
+        Container(color: _T.bg, child: const Center(child: CircularProgressIndicator(color: _T.accent))),
+      // Mobile FAB menu
       Positioned(
         bottom: 24, right: 24,
-        child: FloatingActionButton.extended(
-          onPressed: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const AnalyticsPage())),
-          backgroundColor: _T.accent,
-          foregroundColor: _T.bg,
-          icon: const Icon(Icons.bar_chart_rounded),
-          label: const Text('Analytics', style: TextStyle(fontWeight: FontWeight.bold)),
-          elevation: 8,
-        ),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+          _mobileFab(Icons.summarize_rounded,   'Reports & AI', _T.orange,  () => _go(const ReportsAndChatbotPage())),
+          const SizedBox(height: 10),
+          _mobileFab(Icons.hub_rounded,          'Clustering',   _T.purple,  () => _go(ClusteringPage())),
+          const SizedBox(height: 10),
+          const SizedBox(height: 10),
+          FloatingActionButton.extended(
+            heroTag: 'analytics',
+            onPressed: () => _go(const AnalyticsPage()),
+            backgroundColor: _T.accent,
+            foregroundColor: _T.bg,
+            icon: const Icon(Icons.bar_chart_rounded),
+            label: const Text('Analytics', style: TextStyle(fontWeight: FontWeight.bold)),
+            elevation: 6,
+          ),
+        ]),
       ),
     ]);
   }
+
+  Widget _mobileFab(IconData icon, String label, Color color, VoidCallback onTap) =>
+      FloatingActionButton.extended(
+        heroTag: label,
+        onPressed: onTap,
+        backgroundColor: color.withOpacity(0.9),
+        foregroundColor: _T.bg,
+        icon: Icon(icon, size: 18),
+        label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        elevation: 4,
+      );
 
   // ─────────────────────────────────────────────
   //  STATS ROW
   // ─────────────────────────────────────────────
   Widget _buildStatsRow() {
     final stats = [
-      ('Total Records', _statsLoading ? '…' : '$_totalRecords', _T.accent, Icons.storage_rounded),
-      ('Valid Records', _statsLoading ? '…' : '$_validRecords', _T.green, Icons.verified_rounded),
-      ('Flagged', _statsLoading ? '…' : '$_flaggedRecords', _T.red, Icons.flag_rounded),
-      ('Avg Quality', _statsLoading ? '…' : '${_avgQuality.toStringAsFixed(0)}%', _T.orange, Icons.star_rounded),
+      ('Total Records', _statsLoading ? '…' : '$_totalRecords',                      _T.accent,  Icons.storage_rounded),
+      ('Valid Records', _statsLoading ? '…' : '$_validRecords',                      _T.green,   Icons.verified_rounded),
+      ('Flagged',       _statsLoading ? '…' : '$_flaggedRecords',                    _T.red,     Icons.flag_rounded),
+      ('Avg Quality',   _statsLoading ? '…' : '${_avgQuality.toStringAsFixed(0)}%',  _T.orange,  Icons.star_rounded),
     ];
-
     return LayoutBuilder(builder: (ctx, box) {
       final cols = box.maxWidth > 700 ? 4 : box.maxWidth > 400 ? 2 : 1;
       return GridView.count(
-        crossAxisCount: cols,
-        shrinkWrap: true,
+        crossAxisCount: cols, shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
-        childAspectRatio: 2.4,
+        crossAxisSpacing: 14, mainAxisSpacing: 14, childAspectRatio: 2.4,
         children: stats.map((s) => Container(
           decoration: BoxDecoration(
-            color: _T.surface,
-            borderRadius: BorderRadius.circular(14),
+            color: _T.surface, borderRadius: BorderRadius.circular(14),
             border: Border.all(color: _T.border),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2),
-                blurRadius: 10, offset: const Offset(0, 3))],
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 3))],
           ),
           padding: const EdgeInsets.all(16),
           child: Row(children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: s.$3.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
+              decoration: BoxDecoration(color: s.$3.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
               child: Icon(s.$4, color: s.$3, size: 22),
             ),
             const SizedBox(width: 14),
-            Column(crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(s.$1, style: const TextStyle(color: _T.muted, fontSize: 11)),
-                  const SizedBox(height: 3),
-                  Text(s.$2, style: TextStyle(color: s.$3,
-                      fontSize: 22, fontWeight: FontWeight.bold)),
-                ]),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+              Text(s.$1, style: const TextStyle(color: _T.muted, fontSize: 11)),
+              const SizedBox(height: 3),
+              Text(s.$2, style: TextStyle(color: s.$3, fontSize: 22, fontWeight: FontWeight.bold)),
+            ]),
           ]),
         )).toList(),
       );
@@ -517,31 +387,55 @@ Widget _buildWebBody() {
   }
 
   // ─────────────────────────────────────────────
-  //  MENU GRID
+  //  MENU GRID — ALL 6 CARDS
   // ─────────────────────────────────────────────
   Widget _buildMenuGrid() {
     final items = [
-      _MenuItem(Icons.bar_chart_rounded, 'Descriptive Analytics',
-          'Causes · Age · Gender · Trends', _T.accent,
-          () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalyticsPage()))),
-      _MenuItem(Icons.lock_reset_rounded, 'Change Password',
-          'Update your admin password', _T.purple, _showChangePassword),
-      _MenuItem(Icons.refresh_rounded, 'Refresh Data',
-          'Reload statistics from database', _T.green, _loadStats),
-      _MenuItem(Icons.logout_rounded, 'Sign Out',
-          'Securely log out of the system', _T.red, _logout),
+      _MenuItem(
+        Icons.bar_chart_rounded,
+        'Descriptive Analytics',
+        'Causes · Age · Gender · Year Trends',
+        _T.accent,
+        () => _go(const AnalyticsPage()),
+      ),
+      _MenuItem(
+        Icons.hub_rounded,
+        'Clustering (K-Means ML)',
+        'Risk clusters · Scatter plot · Stats',
+        _T.purple,
+        () => _go(ClusteringPage()),
+      ),
+      _MenuItem(
+        Icons.summarize_rounded,
+        'Reports & AI Assistant',
+        'Export reports · Chat with your data',
+        _T.orange,
+        () => _go(const ReportsAndChatbotPage()),
+      ),
+      _MenuItem(
+        Icons.lock_reset_rounded,
+        'Change Password',
+        'Update your admin password',
+        _T.pink,
+        _showChangePassword,
+      ),
+      _MenuItem(
+        Icons.logout_rounded,
+        'Sign Out',
+        'Securely log out of the system',
+        _T.red,
+        _logout,
+      ),
     ];
 
     return LayoutBuilder(builder: (ctx, box) {
-      final cols = box.maxWidth > 700 ? 4 : box.maxWidth > 400 ? 2 : 1;
+      final cols = box.maxWidth > 900 ? 3 : box.maxWidth > 600 ? 2 : 1;
       return GridView.count(
-        crossAxisCount: cols,
-        shrinkWrap: true,
+        crossAxisCount: cols, shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
-        childAspectRatio: box.maxWidth > 700 ? 1.6 : 2.2,
-        children: items.map((item) => _buildMenuCard(item)).toList(),
+        crossAxisSpacing: 14, mainAxisSpacing: 14,
+        childAspectRatio: box.maxWidth > 900 ? 2.2 : 2.4,
+        children: items.map(_buildMenuCard).toList(),
       );
     });
   }
@@ -553,32 +447,27 @@ Widget _buildWebBody() {
         decoration: BoxDecoration(
           color: _T.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _T.border),
-          boxShadow: [BoxShadow(
-              color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 3))],
+          border: Border.all(color: item.color.withOpacity(0.2)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 3))],
         ),
         padding: const EdgeInsets.all(18),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: item.color.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(item.icon, color: item.color, size: 22),
-                ),
-                Icon(Icons.arrow_forward_ios_rounded, color: _T.border, size: 14),
-              ]),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(item.title, style: const TextStyle(
-                    color: _T.text, fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 4),
-                Text(item.subtitle, style: const TextStyle(color: _T.muted, fontSize: 11)),
-              ]),
-            ]),
+        child: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: item.color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(item.icon, color: item.color, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(item.title, style: const TextStyle(color: _T.text, fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 4),
+            Text(item.subtitle, style: const TextStyle(color: _T.muted, fontSize: 11)),
+          ])),
+          Icon(Icons.arrow_forward_ios_rounded, color: item.color.withOpacity(0.5), size: 14),
+        ]),
       ),
     );
   }
@@ -622,18 +511,13 @@ class _ConfirmDialog extends StatelessWidget {
       title: Row(children: [
         Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: confirmColor.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: BoxDecoration(color: confirmColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
           child: Icon(icon, color: confirmColor, size: 20),
         ),
         const SizedBox(width: 12),
-        Text(title, style: const TextStyle(color: Color(0xFFF1F5F9),
-            fontWeight: FontWeight.bold, fontSize: 16)),
+        Text(title, style: const TextStyle(color: Color(0xFFF1F5F9), fontWeight: FontWeight.bold, fontSize: 16)),
       ]),
-      content: Text(message,
-          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14)),
+      content: Text(message, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14)),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
@@ -642,8 +526,7 @@ class _ConfirmDialog extends StatelessWidget {
         ElevatedButton(
           onPressed: () => Navigator.pop(context, true),
           style: ElevatedButton.styleFrom(
-            backgroundColor: confirmColor,
-            foregroundColor: Colors.white,
+            backgroundColor: confirmColor, foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
           child: Text(confirmLabel),
@@ -664,15 +547,15 @@ class _ChangePasswordDialog extends StatefulWidget {
 }
 
 class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
-  final _formKey = GlobalKey<FormState>();
+  final _formKey    = GlobalKey<FormState>();
   final _currentCtrl = TextEditingController();
-  final _newCtrl = TextEditingController();
+  final _newCtrl    = TextEditingController();
   final _confirmCtrl = TextEditingController();
 
-  bool _showCurrent = false;
-  bool _showNew = false;
-  bool _showConfirm = false;
-  bool _loading = false;
+  bool   _showCurrent = false;
+  bool   _showNew     = false;
+  bool   _showConfirm = false;
+  bool   _loading     = false;
   String? _errorMsg;
   String? _successMsg;
 
@@ -686,41 +569,23 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-
     setState(() { _loading = true; _errorMsg = null; _successMsg = null; });
-
     try {
-      final sb = Supabase.instance.client;
+      final sb    = Supabase.instance.client;
       final email = sb.auth.currentUser?.email ?? '';
-
-      // Re-authenticate with current password
-      final authRes = await sb.auth.signInWithPassword(
-        email: email,
-        password: _currentCtrl.text.trim(),
-      );
-
-      if (authRes.user == null) {
-        setState(() {
-          _errorMsg = 'Current password is incorrect.';
-          _loading = false;
-        });
+      final auth  = await sb.auth.signInWithPassword(email: email, password: _currentCtrl.text.trim());
+      if (auth.user == null) {
+        setState(() { _errorMsg = 'Current password is incorrect.'; _loading = false; });
         return;
       }
-
-      // Update to new password
       await sb.auth.updateUser(UserAttributes(password: _newCtrl.text.trim()));
-
-      setState(() {
-        _successMsg = 'Password updated successfully!';
-        _loading = false;
-      });
-
+      setState(() { _successMsg = 'Password updated successfully!'; _loading = false; });
       await Future.delayed(const Duration(seconds: 1));
       if (mounted) Navigator.pop(context);
     } catch (e) {
       setState(() {
         _errorMsg = 'Error: ${e.toString().replaceAll('AuthException:', '').trim()}';
-        _loading = false;
+        _loading  = false;
       });
     }
   }
@@ -735,26 +600,18 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
         padding: const EdgeInsets.all(28),
         child: Form(
           key: _formKey,
-          child: Column(mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             // Header
             Row(children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF818CF8).withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.lock_reset_rounded,
-                    color: Color(0xFF818CF8), size: 22),
+                decoration: BoxDecoration(color: const Color(0xFF818CF8).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.lock_reset_rounded, color: Color(0xFF818CF8), size: 22),
               ),
               const SizedBox(width: 12),
               const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Change Password',
-                    style: TextStyle(color: Color(0xFFF1F5F9),
-                        fontWeight: FontWeight.bold, fontSize: 17)),
-                Text('Update your admin password',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                Text('Change Password', style: TextStyle(color: Color(0xFFF1F5F9), fontWeight: FontWeight.bold, fontSize: 17)),
+                Text('Update your admin password', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
               ])),
               IconButton(
                 icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
@@ -766,18 +623,15 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
             const Divider(color: Color(0xFF334155)),
             const SizedBox(height: 20),
 
-            // Error / Success banners
-            if (_errorMsg != null) _banner(_errorMsg!, const Color(0xFFF87171), Icons.error_outline_rounded),
+            if (_errorMsg   != null) _banner(_errorMsg!,   const Color(0xFFF87171), Icons.error_outline_rounded),
             if (_successMsg != null) _banner(_successMsg!, const Color(0xFF34D399), Icons.check_circle_outline_rounded),
 
-            // Current password
             _fieldLabel('Current Password'),
             _pwField(_currentCtrl, 'Enter current password', _showCurrent,
                 () => setState(() => _showCurrent = !_showCurrent),
                 validator: (v) => (v == null || v.isEmpty) ? 'Required' : null),
             const SizedBox(height: 16),
 
-            // New password
             _fieldLabel('New Password'),
             _pwField(_newCtrl, 'Min. 8 characters', _showNew,
                 () => setState(() => _showNew = !_showNew),
@@ -788,7 +642,6 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
                 }),
             const SizedBox(height: 16),
 
-            // Confirm new password
             _fieldLabel('Confirm New Password'),
             _pwField(_confirmCtrl, 'Re-enter new password', _showConfirm,
                 () => setState(() => _showConfirm = !_showConfirm),
@@ -799,38 +652,32 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
                 }),
             const SizedBox(height: 24),
 
-            // Actions
             Row(children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF94A3B8),
-                    side: const BorderSide(color: Color(0xFF334155)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: const Text('Cancel'),
+              Expanded(child: OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF94A3B8),
+                  side: const BorderSide(color: Color(0xFF334155)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-              ),
+                child: const Text('Cancel'),
+              )),
               const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _loading ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF818CF8),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    disabledBackgroundColor: const Color(0xFF334155),
-                  ),
-                  child: _loading
-                      ? const SizedBox(width: 18, height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Update Password',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
+              Expanded(child: ElevatedButton(
+                onPressed: _loading ? null : _submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF818CF8),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  disabledBackgroundColor: const Color(0xFF334155),
                 ),
-              ),
+                child: _loading
+                    ? const SizedBox(width: 18, height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Update Password', style: TextStyle(fontWeight: FontWeight.bold)),
+              )),
             ]),
           ]),
         ),
@@ -840,8 +687,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
 
   Widget _fieldLabel(String label) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
-    child: Text(label, style: const TextStyle(
-        color: Color(0xFFCBD5E1), fontSize: 12, fontWeight: FontWeight.w600)),
+    child: Text(label, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, fontWeight: FontWeight.w600)),
   );
 
   Widget _pwField(TextEditingController ctrl, String hint, bool visible,
@@ -854,30 +700,21 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
-          filled: true,
-          fillColor: const Color(0xFF0F172A),
+          filled: true, fillColor: const Color(0xFF0F172A),
           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
           suffixIcon: IconButton(
             icon: Icon(visible ? Icons.visibility_off_rounded : Icons.visibility_rounded,
                 color: const Color(0xFF64748B), size: 18),
             onPressed: toggleVis,
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFF334155)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFF818CF8)),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFF87171)),
-          ),
-          focusedErrorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFF87171)),
-          ),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFF334155))),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFF818CF8))),
+          errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFFF87171))),
+          focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFFF87171))),
           errorStyle: const TextStyle(color: Color(0xFFF87171), fontSize: 11),
         ),
       );
