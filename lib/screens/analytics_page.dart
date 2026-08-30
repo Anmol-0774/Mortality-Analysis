@@ -192,8 +192,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   String? _selYear;
 
   // Disease-by-city trend filters (independent)
-  String? _trendDisease;
-  final _trendLocalityCtrl = TextEditingController();
+  // Disease-by-city trend filters (independent)
+String? _trendDisease;
+String? _trendLocality;
+final _trendOtherDiseaseCtrl = TextEditingController();
 
   List<String> _districts = [];
   List<String> _years = [];
@@ -209,18 +211,45 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     super.initState();
     _fetchData();
   }
-
-  @override
-  void dispose() {
-    _localityCtrl.dispose();
-    _trendLocalityCtrl.dispose();
-    super.dispose();
-  }
-
+@override
+void dispose() {
+  _localityCtrl.dispose();
+  _trendOtherDiseaseCtrl.dispose();
+  super.dispose();
+}
   // ═══════════════════════════════════════════════════════
   // FETCH
   // ═══════════════════════════════════════════════════════
+List<String> get _trendLocalities {
+  final unique = <String, String>{};
 
+  for (final r in _allData) {
+    final locality = r['specific_locality']?.toString().trim() ?? '';
+
+    if (locality.isEmpty ||
+        locality.toLowerCase() == 'unknown' ||
+        locality.toLowerCase() == 'unspecified') {
+      continue;
+    }
+
+    // Case-insensitive uniqueness.
+    // Keeps the first original spelling for display.
+    unique.putIfAbsent(locality.toLowerCase(), () => locality);
+  }
+
+  final result = unique.values.toList();
+
+  result.sort(
+    (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+  );
+
+  return result;
+}
+ 
+ String _normalizeTrendValue(String value) {
+  return value.trim().toLowerCase();
+}
+ 
   Future<void> _fetchData() async {
     if (mounted) {
       setState(() {
@@ -580,27 +609,66 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   // ═══════════════════════════════════════════════════════
   // CITY DISEASE TREND
   // ═══════════════════════════════════════════════════════
+List<_TD> get _cityDiseaseTrend {
+  if (_trendDisease == null) return [];
 
-  List<_TD> get _cityDiseaseTrend {
-    if (_trendDisease == null) return [];
-    final loc = _trendLocalityCtrl.text.trim().toLowerCase();
+  final selectedDisease = _trendDisease == 'Other'
+      ? _trendOtherDiseaseCtrl.text.trim()
+      : (_trendDisease ?? '').trim();
 
-    return _years.map((y) {
-      final count = _allData.where((r) {
-        if (r['cause_of_death']?.toString() != _trendDisease) return false;
-        if (!(r['date_of_death']?.toString() ?? '').startsWith(y)) {
+  if (selectedDisease.isEmpty) return [];
+
+  final selectedDiseaseNormalized =
+      _normalizeTrendValue(selectedDisease);
+
+  final selectedLocality =
+      (_trendLocality ?? '').trim().toLowerCase();
+
+  return _years.map((y) {
+    final count = _allData.where((r) {
+      // -----------------------------
+      // Disease matching
+      // -----------------------------
+      final recordDisease =
+          r['cause_of_death']?.toString().trim() ?? '';
+
+      if (recordDisease.isEmpty) return false;
+
+      if (_normalizeTrendValue(recordDisease) !=
+          selectedDiseaseNormalized) {
+        return false;
+      }
+
+      // -----------------------------
+      // Year matching
+      // -----------------------------
+      final date =
+          r['date_of_death']?.toString() ?? '';
+
+      if (!date.startsWith(y)) {
+        return false;
+      }
+
+      // -----------------------------
+      // Locality matching
+      // -----------------------------
+      if (selectedLocality.isNotEmpty) {
+        final recordLocality =
+            r['specific_locality']?.toString().trim().toLowerCase() ?? '';
+
+        if (recordLocality != selectedLocality) {
           return false;
         }
-        if (loc.isNotEmpty &&
-            !(r['specific_locality']?.toString().toLowerCase() ?? '')
-                .contains(loc)) {
-          return false;
-        }
-        return true;
-      }).length;
-      return _TD(y, count.toDouble());
-    }).toList();
-  }
+      }
+
+      return true;
+    }).length;
+
+    return _TD(y, count.toDouble());
+  }).toList();
+}
+
+
 
   String _cityTrendRatio(List<_TD> td) {
     if (td.length < 2) return '';
@@ -2764,169 +2832,380 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   // ═══════════════════════════════════════════════════════
   // 17. CITY DISEASE TREND
   // ═══════════════════════════════════════════════════════
+Widget _buildCityDiseaseTrend() {
+  final td = _cityDiseaseTrend;
+  final ratio = _cityTrendRatio(td);
 
-  Widget _buildCityDiseaseTrend() {
-    final td = _cityDiseaseTrend;
-    final ratio = _cityTrendRatio(td);
-    final loc = _trendLocalityCtrl.text.trim();
-    final hasData = td.any((t) => t.count > 0);
-    final isUp = td.length >= 2 && td.last.count > td.first.count;
+  final loc = (_trendLocality ?? '').trim();
 
-    return _card(
-      title: 'Disease Trend by City / Year',
-      badge: 'Localized Trend',
-      badgeColor: _T.orange,
-      subtitle: 'Select a disease + enter a specific city to see year-by-year change',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          LayoutBuilder(
-            builder: (ctx, box) {
-              final wide = box.maxWidth > _Break.mobile;
+  final selectedDisease = _trendDisease == 'Other'
+      ? _trendOtherDiseaseCtrl.text.trim()
+      : (_trendDisease ?? '').trim();
 
-              final diseaseField = DropdownButtonFormField<String>(
-                initialValue: _trendDisease,
-                dropdownColor: _T.surface,
-                style: const TextStyle(color: _T.text, fontSize: 12),
-                decoration: _deco('Select Disease'),
-                isExpanded: true,
-                items: _allDiseases
-                    .map((d) => DropdownMenuItem(value: d, child: Text(d)))
-                    .toList(),
-                onChanged: (v) => setState(() => _trendDisease = v),
+  final hasData = td.any((t) => t.count > 0);
+
+  final isUp =
+      td.length >= 2 && td.last.count > td.first.count;
+
+  final diseaseOptions = [
+    ..._allDiseases.where(
+      (d) => d.trim().toLowerCase() != 'other',
+    ),
+    'Other',
+  ];
+
+  return _card(
+    title: 'Disease Trend by City / Year',
+    badge: 'Localized Trend',
+    badgeColor: _T.orange,
+    subtitle:
+        'Select a disease and specific locality to see year-by-year change',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LayoutBuilder(
+          builder: (ctx, box) {
+            final wide = box.maxWidth > _Break.mobile;
+
+            // ---------------------------------------------
+            // Disease dropdown
+            // ---------------------------------------------
+            final diseaseField =
+                DropdownButtonFormField<String>(
+              value: _trendDisease,
+              dropdownColor: _T.surface,
+              style: const TextStyle(
+                color: _T.text,
+                fontSize: 12,
+              ),
+              decoration: _deco('Select Disease'),
+              isExpanded: true,
+              items: diseaseOptions
+                  .map(
+                    (d) => DropdownMenuItem<String>(
+                      value: d,
+                      child: Text(
+                        d,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                setState(() {
+                  _trendDisease = v;
+
+                  // Clear custom disease whenever
+                  // a normal disease is selected.
+                  if (v != 'Other') {
+                    _trendOtherDiseaseCtrl.clear();
+                  }
+                });
+              },
+            );
+
+            // ---------------------------------------------
+            // Other disease text field
+            // ---------------------------------------------
+            final otherDiseaseField =
+                _trendDisease == 'Other'
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: TextFormField(
+                          controller: _trendOtherDiseaseCtrl,
+                          style: const TextStyle(
+                            color: _T.text,
+                            fontSize: 12,
+                          ),
+                          decoration:
+                              _deco('Enter disease name…'),
+                          textInputAction:
+                              TextInputAction.done,
+                          onChanged: (_) {
+                            setState(() {});
+                          },
+                        ),
+                      )
+                    : const SizedBox.shrink();
+
+            // ---------------------------------------------
+            // Specific locality dropdown
+            // ---------------------------------------------
+            final localityField =
+                DropdownButtonFormField<String>(
+              value: _trendLocality,
+              dropdownColor: _T.surface,
+              style: const TextStyle(
+                color: _T.text,
+                fontSize: 12,
+              ),
+              decoration:
+                  _deco('Select City / Village'),
+              isExpanded: true,
+              items: [
+                const DropdownMenuItem<String>(
+                  value: null,
+                  child: Text(
+                    'All Localities',
+                    style: TextStyle(
+                      color: _T.muted,
+                    ),
+                  ),
+                ),
+                ..._trendLocalities.map(
+                  (locality) =>
+                      DropdownMenuItem<String>(
+                    value: locality,
+                    child: Text(
+                      locality,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _trendLocality = value;
+                });
+              },
+            );
+
+            // ---------------------------------------------
+            // Responsive layout
+            // ---------------------------------------------
+            if (wide) {
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: diseaseField,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: localityField,
+                      ),
+                    ],
+                  ),
+                  otherDiseaseField,
+                ],
               );
+            }
 
-              final cityField = TextFormField(
-                controller: _trendLocalityCtrl,
-                style: const TextStyle(color: _T.text, fontSize: 12),
-                decoration: _deco('Enter City / Village name…'),
-                onChanged: (_) => setState(() {}),
-              );
-
-              if (wide) {
-                return Row(children: [
-                  Expanded(child: diseaseField),
-                  const SizedBox(width: 12),
-                  Expanded(child: cityField),
-                ]);
-              }
-
-              return Column(children: [
+            return Column(
+              children: [
                 diseaseField,
                 const SizedBox(height: 10),
-                cityField,
-              ]);
-            },
-          ),
-          const SizedBox(height: 16),
-          if (td.length >= 2 && hasData) ...[
-            LayoutBuilder(builder: (ctx, box) {
+                localityField,
+                otherDiseaseField,
+              ],
+            );
+          },
+        ),
+
+        const SizedBox(height: 16),
+
+        // -----------------------------------------------
+        // Statistics
+        // -----------------------------------------------
+        if (td.length >= 2 && hasData) ...[
+          LayoutBuilder(
+            builder: (ctx, box) {
               final narrow = box.maxWidth < 480;
+
               final pills = [
-                _statPill('Change', ratio, isUp ? _T.red : _T.green),
                 _statPill(
-                    'Peak Year',
-                    td.reduce((a, b) => a.count > b.count ? a : b).year,
-                    _T.accent),
-                _statPill('Latest (${_years.isNotEmpty ? _years.last : "—"})',
-                    '${td.isEmpty ? 0 : td.last.count.toInt()} deaths',
-                    isUp ? _T.red : _T.green),
+                  'Change',
+                  ratio,
+                  isUp ? _T.red : _T.green,
+                ),
+                _statPill(
+                  'Peak Year',
+                  td
+                      .reduce(
+                        (a, b) =>
+                            a.count > b.count ? a : b,
+                      )
+                      .year,
+                  _T.accent,
+                ),
+                _statPill(
+                  'Latest (${_years.isNotEmpty ? _years.last : "—"})',
+                  '${td.isEmpty ? 0 : td.last.count.toInt()} deaths',
+                  isUp ? _T.red : _T.green,
+                ),
               ];
 
               if (narrow) {
                 return Column(
                   children: pills
-                      .map((p) => Padding(padding: const EdgeInsets.only(bottom: 8), child: p))
+                      .map(
+                        (p) => Padding(
+                          padding:
+                              const EdgeInsets.only(bottom: 8),
+                          child: p,
+                        ),
+                      )
                       .toList(),
                 );
               }
 
-              return Row(children: [
-                for (int i = 0; i < pills.length; i++) ...[
-                  pills[i],
-                  if (i != pills.length - 1) const SizedBox(width: 10),
-                ],
-              ]);
-            }),
-            const SizedBox(height: 14),
-          ],
-          if (loc.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
+              return Row(
                 children: [
-                  const Icon(Icons.place_rounded, size: 13, color: _T.orange),
-                  const SizedBox(width: 5),
-                  Flexible(
-                    child: Text('Showing: ${_trendDisease ?? "—"} in "$loc"',
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: _T.orange, fontSize: 12, fontWeight: FontWeight.w600)),
-                  ),
+                  for (int i = 0;
+                      i < pills.length;
+                      i++) ...[
+                    pills[i],
+                    if (i != pills.length - 1)
+                      const SizedBox(width: 10),
+                  ],
                 ],
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Text(
-                'Showing all localities for ${_trendDisease ?? "—"}  ·  enter a city name above to localize',
-                style: const TextStyle(color: _T.muted, fontSize: 11),
+              );
+            },
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        // -----------------------------------------------
+        // Current selection label
+        // -----------------------------------------------
+        if (selectedDisease.isNotEmpty &&
+            loc.isNotEmpty)
+          Padding(
+            padding:
+                const EdgeInsets.only(bottom: 10),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.place_rounded,
+                  size: 13,
+                  color: _T.orange,
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    'Showing: $selectedDisease in "$loc"',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _T.orange,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else if (selectedDisease.isNotEmpty)
+          Padding(
+            padding:
+                const EdgeInsets.only(bottom: 10),
+            child: Text(
+              'Showing all localities for $selectedDisease · select a city / village above to localize',
+              style: const TextStyle(
+                color: _T.muted,
+                fontSize: 11,
               ),
             ),
-          !hasData && loc.isNotEmpty
-              ? _empty('No data for "$_trendDisease" in "$loc"')
-              : SfCartesianChart(
-                  backgroundColor: Colors.transparent,
-                  plotAreaBackgroundColor: Colors.transparent,
-                  margin: EdgeInsets.zero,
-                  primaryXAxis: _catAxis,
-                  primaryYAxis: NumericAxis(
-                    labelStyle: const TextStyle(color: _T.muted, fontSize: 10),
-                    axisLine: const AxisLine(color: _T.border),
-                    majorGridLines: MajorGridLines(
-                        color: _T.border.withOpacity(0.5), width: 0.5, dashArray: const [4, 4]),
-                    majorTickLines: const MajorTickLines(size: 0),
-                    title: AxisTitle(
-                        text: 'Deaths per year',
-                        textStyle: const TextStyle(color: _T.muted, fontSize: 10)),
+          ),
+
+        // -----------------------------------------------
+        // Empty state
+        // -----------------------------------------------
+        !hasData &&
+                selectedDisease.isNotEmpty
+            ? _empty(
+                loc.isNotEmpty
+                    ? 'No data for "$selectedDisease" in "$loc"'
+                    : 'No data found for "$selectedDisease"',
+              )
+            : SfCartesianChart(
+                backgroundColor: Colors.transparent,
+                plotAreaBackgroundColor:
+                    Colors.transparent,
+                margin: EdgeInsets.zero,
+                primaryXAxis: _catAxis,
+                primaryYAxis: NumericAxis(
+                  labelStyle:
+                      const TextStyle(
+                    color: _T.muted,
+                    fontSize: 10,
                   ),
-                  tooltipBehavior: TooltipBehavior(
-                    enable: true,
-                    header: _trendDisease ?? '',
-                    color: _T.surface,
-                    textStyle: const TextStyle(color: _T.text, fontSize: 11),
-                    borderColor: _T.border,
-                    borderWidth: 1,
+                  axisLine:
+                      const AxisLine(
+                    color: _T.border,
                   ),
-                  series: [
-                    SplineAreaSeries<_TD, String>(
-                      dataSource: td,
-                      xValueMapper: (d, _) => d.year,
-                      yValueMapper: (d, _) => d.count,
-                      color: _T.orange.withOpacity(0.12),
-                      borderColor: _T.orange,
-                      borderWidth: 2.5,
-                      splineType: SplineType.cardinal,
-                      markerSettings: const MarkerSettings(
-                        isVisible: true,
-                        color: _T.orange,
-                        borderColor: _T.surface,
-                        borderWidth: 2,
-                        height: 8,
-                        width: 8,
-                      ),
-                      dataLabelSettings: const DataLabelSettings(
-                        isVisible: true,
-                        textStyle: TextStyle(color: _T.sub, fontSize: 10),
+                  majorGridLines:
+                      MajorGridLines(
+                    color:
+                        _T.border.withOpacity(0.5),
+                    width: 0.5,
+                    dashArray: const [4, 4],
+                  ),
+                  majorTickLines:
+                      const MajorTickLines(size: 0),
+                  title: AxisTitle(
+                    text: 'Deaths per year',
+                    textStyle:
+                        const TextStyle(
+                      color: _T.muted,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+                tooltipBehavior:
+                    TooltipBehavior(
+                  enable: true,
+                  header: selectedDisease,
+                  color: _T.surface,
+                  textStyle:
+                      const TextStyle(
+                    color: _T.text,
+                    fontSize: 11,
+                  ),
+                  borderColor: _T.border,
+                  borderWidth: 1,
+                ),
+                series: [
+                  SplineAreaSeries<_TD, String>(
+                    dataSource: td,
+                    xValueMapper: (d, _) =>
+                        d.year,
+                    yValueMapper: (d, _) =>
+                        d.count,
+                    color: _T.orange
+                        .withOpacity(0.12),
+                    borderColor: _T.orange,
+                    borderWidth: 2.5,
+                    splineType:
+                        SplineType.cardinal,
+                    markerSettings:
+                        const MarkerSettings(
+                      isVisible: true,
+                      color: _T.orange,
+                      borderColor:
+                          _T.surface,
+                      borderWidth: 2,
+                      height: 8,
+                      width: 8,
+                    ),
+                    dataLabelSettings:
+                        const DataLabelSettings(
+                      isVisible: true,
+                      textStyle:
+                          TextStyle(
+                        color: _T.sub,
+                        fontSize: 10,
                       ),
                     ),
-                  ],
-                ),
-        ],
-      ),
-    );
-  }
+                  ),
+                ],
+              ),
+      ],
+    ),
+  );
+}
+
 
   Widget _statPill(String label, String value, Color color) => Expanded(
         child: Container(
