@@ -31,10 +31,34 @@ class ReportsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: _T.bg,
       appBar: null,
-      body: _ReportsTab(),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ── Back button (same top-left navigation style as other pages)
+            Align(
+              alignment: Alignment.topLeft,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                child: IconButton(
+                  tooltip: 'Back',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: _T.text,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ),
+            const Expanded(
+              child: _ReportsTab(),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
