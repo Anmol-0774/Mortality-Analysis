@@ -1,32 +1,31 @@
-// ignore_for_file: use_super_parameters
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'data_form_screen.dart';
-import 'signup_screen.dart';
+import 'package:mortality_analysis/screens/dashboard_screen.dart';
 
 // ═══════════════════════════════════════════════════════
-//  FIELD WORKER LOGIN — this is the ONLY login shown when
-//  the app opens normally. Admin login lives on its own
-//  separate route (see admin_login_screen.dart) and is
-//  never linked from here.
+//  ADMIN LOGIN — NOT linked from the main LoginScreen.
+//  Reach this only through its own route (e.g. a named
+//  route like '/admin-panel'), which on Flutter web means
+//  typing the URL directly, e.g.:
+//    https://yourapp.com/#/admin-panel
+//  See the routing notes below for how to wire this up.
 // ═══════════════════════════════════════════════════════
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class AdminLoginScreen extends StatefulWidget {
+  const AdminLoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<AdminLoginScreen> createState() => _AdminLoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
-  final _workerEmailController = TextEditingController();
-  final _workerPasswordController = TextEditingController();
+class _AdminLoginScreenState extends State<AdminLoginScreen> {
+  final _adminEmailController = TextEditingController();
+  final _adminPasswordController = TextEditingController();
 
   bool _isLoading = false;
 
-  Future<void> _loginAsWorker() async {
-    final email = _workerEmailController.text.trim();
-    final password = _workerPasswordController.text.trim();
+  Future<void> _loginAsAdmin() async {
+    final email = _adminEmailController.text.trim();
+    final password = _adminPasswordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
       _showSnackBar("Please fill in all fields", Colors.orange);
@@ -45,18 +44,16 @@ class _LoginScreenState extends State<LoginScreen> {
       if (response.session != null) {
         final loggedInEmail = response.user!.email!.toLowerCase();
 
-        // اگر ایڈمن غلطی سے یہاں سے لاگ ان کرنے کی کوشش کرے تو اسے بلاک کریں
+        // سخت چیک: صرف مخصوص ایڈمن ای میل کو ہی ڈیش بورڈ کی اجازت ہوگی
         if (loggedInEmail == 'admin@mortality.com') {
-          await Supabase.instance.client.auth.signOut();
-          _showSnackBar(
-            "Access Denied: Admins must use the dedicated Admin Panel URL.",
-            Colors.red,
-          );
-        } else {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const DataFormScreen()),
+            MaterialPageRoute(builder: (context) => DashboardScreen()),
           );
+        } else {
+          // اگر کوئی عام فیلڈ ورکر ایڈمن پینل ہیک کرنے یا لاگ ان کرنے کی کوشش کرے
+          await Supabase.instance.client.auth.signOut();
+          _showSnackBar("Access Denied: You are not authorized as an Admin!", Colors.red);
         }
       }
     } on AuthException catch (e) {
@@ -82,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
         height: double.infinity,
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Colors.deepPurple.shade900, Colors.indigo.shade800],
+            colors: [Colors.indigo.shade900, Colors.deepPurple.shade900],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -95,10 +92,10 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.health_and_safety, size: 80, color: Colors.white),
+                  const Icon(Icons.admin_panel_settings, size: 80, color: Colors.white),
                   const SizedBox(height: 10),
                   const Text(
-                    "Mortality Records Gateway",
+                    "Admin Panel Access",
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 28,
@@ -114,29 +111,29 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Column(
                         children: [
                           const Text(
-                            "Worker Authentication",
+                            "Administrative Secure Access",
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: Colors.deepPurple,
+                              color: Colors.indigo,
                             ),
                           ),
                           const SizedBox(height: 25),
                           TextField(
-                            controller: _workerEmailController,
+                            controller: _adminEmailController,
                             decoration: InputDecoration(
-                              labelText: "Worker Email",
-                              prefixIcon: const Icon(Icons.email, color: Colors.deepPurple),
+                              labelText: "Admin Email",
+                              prefixIcon: const Icon(Icons.security, color: Colors.indigo),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                           ),
                           const SizedBox(height: 20),
                           TextField(
-                            controller: _workerPasswordController,
+                            controller: _adminPasswordController,
                             obscureText: true,
                             decoration: InputDecoration(
-                              labelText: "Password",
-                              prefixIcon: const Icon(Icons.lock, color: Colors.deepPurple),
+                              labelText: "Secret Password",
+                              prefixIcon: const Icon(Icons.lock_person, color: Colors.indigo),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                           ),
@@ -144,27 +141,28 @@ class _LoginScreenState extends State<LoginScreen> {
                           _isLoading
                               ? const CircularProgressIndicator()
                               : ElevatedButton(
-                                  onPressed: _loginAsWorker,
+                                  onPressed: _loginAsAdmin,
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.deepPurple,
+                                    backgroundColor: Colors.indigo,
                                     minimumSize: const Size(double.infinity, 55),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   ),
                                   child: const Text(
-                                    "SIGN IN AS WORKER",
+                                    "AUTHORIZE & ENTER",
                                     style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                                   ),
                                 ),
                           const SizedBox(height: 15),
-                          TextButton(
-                            onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const SignupScreen()),
-                            ),
-                            child: const Text(
-                              "Create a Worker Account? Sign Up",
-                              style: TextStyle(color: Colors.deepPurple),
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.enhanced_encryption, size: 16, color: Colors.grey.shade500),
+                              const SizedBox(width: 5),
+                              Text(
+                                "Encrypted FYP Administrator Session",
+                                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -176,40 +174,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════
-//  WEBVIEW DASHBOARD (unchanged, kept from original file)
-// ═══════════════════════════════════════════════════════
-class DashboardWebViewScreen extends StatefulWidget {
-  const DashboardWebViewScreen({super.key});
-
-  @override
-  State<DashboardWebViewScreen> createState() => _DashboardWebViewScreenState();
-}
-
-class _DashboardWebViewScreenState extends State<DashboardWebViewScreen> {
-  late final WebViewController controller;
-
-  @override
-  void initState() {
-    super.initState();
-
-    controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..loadFlutterAsset('assets/dashboard.html');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mortality Analytics Dashboard'),
-        backgroundColor: Colors.indigo,
-      ),
-      body: WebViewWidget(controller: controller),
     );
   }
 }

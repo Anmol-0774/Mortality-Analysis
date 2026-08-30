@@ -81,7 +81,7 @@ class MortalityLogoPainter extends CustomPainter {
 
     // The surrounding subtle circular target line
     final circlePaint = Paint()
-      ..color = const Color(0xFF38BDF8).withOpacity(0.2)
+      ..color = const Color(0xFF38BDF8).withValues(alpha: 0.2)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
     

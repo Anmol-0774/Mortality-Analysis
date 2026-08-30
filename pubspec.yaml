@@ -25,7 +25,6 @@ dependencies:
   webview_flutter_android: ^3.16.0
   webview_flutter_wkwebview: ^3.13.0
   printing: ^5.13.0
-  fl_chart: ^0.69.0
   flutter_markdown: ^0.7.3
   path_provider: ^2.1.2
   share_plus: ^10.0.0

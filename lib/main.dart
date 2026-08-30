@@ -7,6 +7,7 @@ import 'package:mortality_analysis/screens/splash_screen.dart';
 import 'package:mortality_analysis/screens/dashboard_screen.dart';
 import 'package:mortality_analysis/screens/data_form_screen.dart';
 import 'package:mortality_analysis/screens/login_screen.dart';
+import 'package:mortality_analysis/screens/admin_login_screen.dart';
  // 1. Imported your splash screen file
 
 Future<void> main() async {
@@ -60,8 +61,15 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         colorSchemeSeed: Colors.indigo,
       ),
-      // 2. Set the splash screen as the initial landing screen
-      home: const SplashScreen(), 
+      // 2. Splash screen is the initial landing screen for the normal '/' route
+      home: const SplashScreen(),
+      // 3. Separate named route for the Admin Panel — NOT linked from the
+      // worker LoginScreen anywhere. Reach it directly:
+      //   - Web: https://yourapp.com/#/admin-panel
+      //   - In-app: Navigator.pushNamed(context, '/admin-panel')
+      routes: {
+        '/admin-panel': (context) => const AdminLoginScreen(),
+      },
     );
   }
 }

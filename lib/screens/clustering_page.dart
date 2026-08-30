@@ -34,6 +34,7 @@ class _LocalityPoint {
   final double waterScore;      // water quality score (0-1, higher = better)
   final double comorbidityRate; // proportion with prior conditions
   final int    totalDeaths;     // raw death count
+  final Map<String, int> causeCounts; // cause_of_death -> count, for this locality
   int    cluster = -1;          // assigned cluster (0=Low, 1=Med, 2=High)
 
   _LocalityPoint({
@@ -44,10 +45,20 @@ class _LocalityPoint {
     required this.waterScore,
     required this.comorbidityRate,
     required this.totalDeaths,
+    required this.causeCounts,
   });
 
   // Feature vector for K-Means distance calculation
   List<double> get features => [mortalityRate, avgAge, 1 - waterScore, comorbidityRate];
+
+  // The single most common cause of death recorded in this locality
+  String get topDisease {
+    if (causeCounts.isEmpty) return 'Unknown';
+    return (causeCounts.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value)))
+        .first
+        .key;
+  }
 }
 
 class _ScatterPoint {
@@ -110,7 +121,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
       final res = await _sb
           .from('mortality_records_clean')
           .select('specific_locality, district, age, water_source, '
-              'prior_medical_conditions, quality_score')
+              'prior_medical_conditions, cause_of_death, quality_score')
           .gte('quality_score', 60)
           .limit(10000);
 
@@ -129,6 +140,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
             'locality': loc, 'district': dist,
             'deaths': 0, 'ages': <int>[],
             'waterScores': <double>[], 'comorbidCount': 0,
+            'causeCounts': <String, int>{},
           };
         }
         grouped[key]!['deaths'] = (grouped[key]!['deaths'] as int) + 1;
@@ -148,6 +160,13 @@ class _ClusteringPageState extends State<ClusteringPage> {
             !(conds.length == 1 && (conds.first?.toString().toLowerCase() ?? '') == 'none')) {
           grouped[key]!['comorbidCount'] = (grouped[key]!['comorbidCount'] as int) + 1;
         }
+
+        // Cause of death tally per locality
+        final cause = r['cause_of_death']?.toString() ?? '';
+        if (cause.isNotEmpty && cause != 'Unspecified' && cause != 'Unknown') {
+          final causeCounts = grouped[key]!['causeCounts'] as Map<String, int>;
+          causeCounts[cause] = (causeCounts[cause] ?? 0) + 1;
+        }
       }
 
       if (grouped.isEmpty) {
@@ -164,6 +183,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
         final ages      = g['ages'] as List<int>;
         final wScores   = g['waterScores'] as List<double>;
         final comorbid  = g['comorbidCount'] as int;
+        final causes    = g['causeCounts'] as Map<String, int>;
         final avgAge    = ages.isEmpty ? 0.5 : (ages.reduce((a, b) => a + b) / ages.length) / 90.0;
         final avgWater  = wScores.isEmpty ? 0.5 : wScores.reduce((a, b) => a + b) / wScores.length;
         final comorbRate= deaths > 0 ? comorbid / deaths : 0.0;
@@ -175,6 +195,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
           waterScore: avgWater.clamp(0.0, 1.0),
           comorbidityRate: comorbRate.clamp(0.0, 1.0),
           totalDeaths: deaths,
+          causeCounts: causes,
         );
       }).toList();
 
@@ -310,6 +331,128 @@ class _ClusteringPageState extends State<ClusteringPage> {
     return m.map((p) => p.comorbidityRate).reduce((a, b) => a + b) / m.length;
   }
 
+  /// Most common cause of death across ALL localities in this cluster,
+  /// computed by summing each locality's own cause tally.
+  String _clusterTopDisease(int c) {
+    final members = _clusterMembers(c);
+    final Map<String, int> combined = {};
+    for (final p in members) {
+      p.causeCounts.forEach((cause, count) {
+        combined[cause] = (combined[cause] ?? 0) + count;
+      });
+    }
+    if (combined.isEmpty) return 'Unknown';
+    return (combined.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).first.key;
+  }
+
+  // ─────────────────────────────────────────────
+  //  AREAS LIST POPUP
+  // ─────────────────────────────────────────────
+  void _showAreasDialog(int cluster) {
+    final color = _clusterColors[cluster];
+    final members = List<_LocalityPoint>.from(_clusterMembers(cluster))
+      ..sort((a, b) => b.totalDeaths.compareTo(a.totalDeaths));
+
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: _T.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: SizedBox(
+          width: 560,
+          height: MediaQuery.of(context).size.height * 0.75,
+          child: Column(children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
+              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _T.border))),
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(_clusterIcons[cluster], color: color, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('${_clusterNames[cluster]} — ${members.length} Areas',
+                      style: const TextStyle(color: _T.text, fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text('Sorted by total deaths, highest first',
+                      style: const TextStyle(color: _T.muted, fontSize: 11)),
+                ])),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: _T.muted),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ]),
+            ),
+            // List
+            Expanded(
+              child: members.isEmpty
+                  ? const Center(child: Text('No areas in this cluster',
+                      style: TextStyle(color: _T.muted, fontSize: 12)))
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: members.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (ctx, i) {
+                        final p = members[i];
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: color.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(children: [
+                            Container(
+                              width: 26, height: 26,
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text('${i + 1}',
+                                  style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(p.locality,
+                                    style: const TextStyle(color: _T.text, fontSize: 13, fontWeight: FontWeight.w600)),
+                                Text(p.district, style: const TextStyle(color: _T.muted, fontSize: 11)),
+                                const SizedBox(height: 4),
+                                Row(children: [
+                                  const Icon(Icons.coronavirus_rounded, size: 12, color: _T.muted),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text('Top cause: ${p.topDisease}',
+                                        style: const TextStyle(color: _T.sub, fontSize: 11),
+                                        overflow: TextOverflow.ellipsis),
+                                  ),
+                                ]),
+                              ]),
+                            ),
+                            const SizedBox(width: 8),
+                            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                              Text('${p.totalDeaths} deaths',
+                                  style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
+                              Text('Water: ${(p.waterScore * 100).toStringAsFixed(0)}%',
+                                  style: const TextStyle(color: _T.muted, fontSize: 10)),
+                            ]),
+                          ]),
+                        );
+                      },
+                    ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
   // ─────────────────────────────────────────────
   //  BUILD
   // ─────────────────────────────────────────────
@@ -324,7 +467,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
         title: Row(children: [
           Container(width: 8, height: 8, decoration: BoxDecoration(
             color: _T.purple, shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: _T.purple.withOpacity(0.5), blurRadius: 8)])),
+            boxShadow: [BoxShadow(color: _T.purple.withValues(alpha: 0.5), blurRadius: 8)])),
           const SizedBox(width: 10),
           const Text('K-Means Clustering', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
         ]),
@@ -399,7 +542,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
             // ignore: deprecated_member_use
             color: _T.purple.withOpacity(0.1),
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: _T.purple.withOpacity(0.3)),
+            border: Border.all(color: _T.purple.withValues(alpha: 0.3)),
           ),
           child: Text('K-Means · 3 Clusters · $_iterations iterations',
               style: const TextStyle(color: _T.purple, fontSize: 10, fontWeight: FontWeight.w600)),
@@ -466,7 +609,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
       const SizedBox(height: 24),
 
       // Cluster cards
-      _sec('Cluster Results — 3 Risk Groups'),
+      _sec('Cluster Results — 3 Risk Groups (tap area count for full list)'),
       _clusterCards(),
       const SizedBox(height: 24),
 
@@ -503,14 +646,14 @@ class _ClusteringPageState extends State<ClusteringPage> {
   Widget _mlBanner() => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      gradient: LinearGradient(colors: [_T.purple.withOpacity(0.12), _T.accent.withOpacity(0.06)],
+      gradient: LinearGradient(colors: [_T.purple.withValues(alpha: 0.12), _T.accent.withValues(alpha: 0.06)],
           begin: Alignment.topLeft, end: Alignment.bottomRight),
       borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: _T.purple.withOpacity(0.3)),
+      border: Border.all(color: _T.purple.withValues(alpha: 0.3)),
     ),
     child: Row(children: [
       Container(padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: _T.purple.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+        decoration: BoxDecoration(color: _T.purple.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
         child: const Icon(Icons.psychology_rounded, color: _T.purple, size: 22)),
       const SizedBox(width: 14),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -547,7 +690,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
           padding: const EdgeInsets.all(14),
           child: Row(children: [
             Container(padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: s.$3.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: s.$3.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
               child: Icon(s.$4, color: s.$3, size: 18)),
             const SizedBox(width: 10),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -580,6 +723,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
     final avgD    = _avgDeaths(c);
     final avgW    = (_avgWater(c) * 100).toStringAsFixed(0);
     final avgCo   = (_avgComorbid(c) * 100).toStringAsFixed(0);
+    final topDisease = _clusterTopDisease(c);
 
     final descriptions = [
       'Low mortality · Good water access · Few comorbidities · Safer areas',
@@ -591,31 +735,55 @@ class _ClusteringPageState extends State<ClusteringPage> {
       decoration: BoxDecoration(
         color: _T.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.4), width: 1.5),
-        boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 16, offset: const Offset(0, 4))],
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
+        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 16, offset: const Offset(0, 4))],
       ),
       padding: const EdgeInsets.all(18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // Header
         Row(children: [
           Container(padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
             child: Icon(_clusterIcons[c], color: color, size: 22)),
           const SizedBox(width: 10),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Cluster ${c + 1}', style: const TextStyle(color: _T.muted, fontSize: 11)),
             Text(name, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold)),
           ])),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: color.withOpacity(0.3))),
-            child: Text('${members.length} areas', style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+          // Tappable "N areas" badge — opens the full list popup
+          GestureDetector(
+            onTap: () => _showAreasDialog(c),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: color.withValues(alpha: 0.3))),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text('${members.length} areas', style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+                const SizedBox(width: 4),
+                Icon(Icons.open_in_new_rounded, size: 12, color: color),
+              ]),
+            ),
           ),
         ]),
         const SizedBox(height: 14),
         Text(descriptions[c], style: const TextStyle(color: _T.muted, fontSize: 11, height: 1.5)),
+        const SizedBox(height: 10),
+        // Top disease for this risk group
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(children: [
+            Icon(Icons.coronavirus_rounded, size: 14, color: color),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Leading cause: $topDisease',
+                style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis)),
+          ]),
+        ),
         const SizedBox(height: 14),
         Divider(color: _T.border),
         const SizedBox(height: 10),
@@ -709,7 +877,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
                 textStyle: const TextStyle(color: _T.muted, fontSize: 10)),
             labelStyle: const TextStyle(color: _T.muted, fontSize: 9),
             axisLine: AxisLine(color: _T.border),
-            majorGridLines: MajorGridLines(color: _T.border.withOpacity(0.4), width: 0.5, dashArray: [4, 4]),
+            majorGridLines: MajorGridLines(color: _T.border.withValues(alpha: 0.4), width: 0.5, dashArray: [4, 4]),
             majorTickLines: const MajorTickLines(size: 0),
           ),
           primaryYAxis: NumericAxis(
@@ -717,7 +885,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
                 textStyle: const TextStyle(color: _T.muted, fontSize: 10)),
             labelStyle: const TextStyle(color: _T.muted, fontSize: 9),
             axisLine: AxisLine(color: _T.border),
-            majorGridLines: MajorGridLines(color: _T.border.withOpacity(0.4), width: 0.5, dashArray: [4, 4]),
+            majorGridLines: MajorGridLines(color: _T.border.withValues(alpha: 0.4), width: 0.5, dashArray: [4, 4]),
             majorTickLines: const MajorTickLines(size: 0),
           ),
           tooltipBehavior: TooltipBehavior(
@@ -764,33 +932,36 @@ class _ClusteringPageState extends State<ClusteringPage> {
       ...List.generate(3, (c) {
         final color = _clusterColors[c];
         final members = _clusterMembers(c);
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.06),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color.withOpacity(0.25)),
+        return GestureDetector(
+          onTap: () => _showAreasDialog(c),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: color.withValues(alpha: 0.25)),
+            ),
+            child: Row(children: [
+              Expanded(flex: 2, child: Row(children: [
+                Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_clusterNames[c], style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold))),
+              ])),
+              Expanded(child: Text('${members.length}', textAlign: TextAlign.center,
+                  style: const TextStyle(color: _T.text, fontSize: 13, fontWeight: FontWeight.bold))),
+              Expanded(child: Text(_avgDeaths(c).toStringAsFixed(1), textAlign: TextAlign.center,
+                  style: TextStyle(color: color, fontSize: 12))),
+              Expanded(child: Text('${(_avgWater(c) * 100).toStringAsFixed(0)}%', textAlign: TextAlign.center,
+                  style: TextStyle(color: c == 0 ? _T.green : c == 1 ? _T.yellow : _T.red, fontSize: 12))),
+              Expanded(child: Text('${(_avgComorbid(c) * 100).toStringAsFixed(0)}%', textAlign: TextAlign.center,
+                  style: TextStyle(color: c == 2 ? _T.red : _T.muted, fontSize: 12))),
+            ]),
           ),
-          child: Row(children: [
-            Expanded(flex: 2, child: Row(children: [
-              Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-              const SizedBox(width: 8),
-              Expanded(child: Text(_clusterNames[c], style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold))),
-            ])),
-            Expanded(child: Text('${members.length}', textAlign: TextAlign.center,
-                style: const TextStyle(color: _T.text, fontSize: 13, fontWeight: FontWeight.bold))),
-            Expanded(child: Text(_avgDeaths(c).toStringAsFixed(1), textAlign: TextAlign.center,
-                style: TextStyle(color: color, fontSize: 12))),
-            Expanded(child: Text('${(_avgWater(c) * 100).toStringAsFixed(0)}%', textAlign: TextAlign.center,
-                style: TextStyle(color: c == 0 ? _T.green : c == 1 ? _T.yellow : _T.red, fontSize: 12))),
-            Expanded(child: Text('${(_avgComorbid(c) * 100).toStringAsFixed(0)}%', textAlign: TextAlign.center,
-                style: TextStyle(color: c == 2 ? _T.red : _T.muted, fontSize: 12))),
-          ]),
         );
       }),
     ]),
-    subtitle: 'Average feature values per cluster',
+    subtitle: 'Average feature values per cluster · tap a row to see all its areas',
   );
 
   // ─────────────────────────────────────────────
@@ -840,7 +1011,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
           minimum: 0, maximum: 1,
           labelStyle: const TextStyle(color: _T.muted, fontSize: 10),
           axisLine: AxisLine(color: _T.border),
-          majorGridLines: MajorGridLines(color: _T.border.withOpacity(0.4), width: 0.5, dashArray: [4, 4]),
+          majorGridLines: MajorGridLines(color: _T.border.withValues(alpha: 0.4), width: 0.5, dashArray: [4, 4]),
           majorTickLines: const MajorTickLines(size: 0),
           title: AxisTitle(text: 'Normalized value (0–1)',
               textStyle: const TextStyle(color: _T.muted, fontSize: 10)),
@@ -873,7 +1044,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
                   child: Row(children: [
                     Container(
                       width: 24, height: 24,
-                      decoration: BoxDecoration(color: color.withOpacity(0.15),
+                      decoration: BoxDecoration(color: color.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6)),
                       alignment: Alignment.center,
                       child: Text('$rank', style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
@@ -882,6 +1053,9 @@ class _ClusteringPageState extends State<ClusteringPage> {
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(p.locality, style: const TextStyle(color: _T.text, fontSize: 12, fontWeight: FontWeight.w600)),
                       Text(p.district, style: const TextStyle(color: _T.muted, fontSize: 10)),
+                      Text('Top cause: ${p.topDisease}',
+                          style: const TextStyle(color: _T.muted, fontSize: 10),
+                          overflow: TextOverflow.ellipsis),
                     ])),
                     Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                       Text('${p.totalDeaths} deaths', style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
@@ -926,7 +1100,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
             minimum: 0, maximum: 100,
             labelStyle: const TextStyle(color: _T.muted, fontSize: 10),
             axisLine: AxisLine(color: _T.border),
-            majorGridLines: MajorGridLines(color: _T.border.withOpacity(0.4), width: 0.5, dashArray: [4, 4]),
+            majorGridLines: MajorGridLines(color: _T.border.withValues(alpha: 0.4), width: 0.5, dashArray: [4, 4]),
             majorTickLines: const MajorTickLines(size: 0),
             title: AxisTitle(text: 'Water Quality Score (%)',
                 textStyle: const TextStyle(color: _T.muted, fontSize: 10)),
@@ -972,7 +1146,7 @@ class _ClusteringPageState extends State<ClusteringPage> {
         decoration: BoxDecoration(
           color: _T.surface, borderRadius: BorderRadius.circular(14),
           border: Border.all(color: _T.border),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 4))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 12, offset: const Offset(0, 4))],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Container(
@@ -986,9 +1160,9 @@ class _ClusteringPageState extends State<ClusteringPage> {
               ])),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: badgeColor.withOpacity(0.12),
+                decoration: BoxDecoration(color: badgeColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: badgeColor.withOpacity(0.3))),
+                    border: Border.all(color: badgeColor.withValues(alpha: 0.3))),
                 child: Text(badge, style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.w600)),
               ),
             ]),

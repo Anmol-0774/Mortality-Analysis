@@ -2,7 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mortality_analysis/screens/clustering_page.dart';
-import 'package:mortality_analysis/screens/reports_and_chatbot_page.dart';
+import 'package:mortality_analysis/screens/reports_page.dart';
+import 'package:mortality_analysis/screens/risk_pattern_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -56,23 +57,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!kIsWeb) _loadHtml();
   }
 
-  // ─────────────────────────────────────────────
-  //  LOAD STATS
-  // ─────────────────────────────────────────────
 Future<void> _loadStats() async {
   setState(() => _statsLoading = true);
 
   try {
     final res = await _sb
         .from('mortality_records_clean')
-        .select('quality_score'); // ❌ removed is_valid
+        .select('quality_score, is_valid');
 
     final data = List<Map<String, dynamic>>.from(res as List);
 
     final scores = data
         .map((r) => r['quality_score'])
-        .whereType<num>() // safer than int
+        .whereType<num>()
         .toList();
+
+    final valid = data.where((r) => r['is_valid'] == true).length;
+    final flagged = data.where((r) => r['is_valid'] == false).length;
 
     final avg = scores.isEmpty
         ? 0.0
@@ -80,10 +81,8 @@ Future<void> _loadStats() async {
 
     setState(() {
       _totalRecords = data.length;
-
-      _validRecords = 0;     // ❌ removed is_valid logic
-      _flaggedRecords = 0;   // ❌ removed is_valid logic
-
+      _validRecords = valid;
+      _flaggedRecords = flagged;
       _avgQuality = avg;
       _statsLoading = false;
     });
@@ -92,6 +91,7 @@ Future<void> _loadStats() async {
     debugPrint('Stats error: $e');
   }
 }
+ 
   // ─────────────────────────────────────────────
   //  LOAD HTML (mobile only)
   // ─────────────────────────────────────────────
@@ -173,7 +173,7 @@ Future<void> _loadStats() async {
       decoration: BoxDecoration(
         color: _T.surface,
         border: Border(bottom: BorderSide(color: _T.border)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 16, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 4))],
       ),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
       child: Row(children: [
@@ -186,7 +186,7 @@ Future<void> _loadStats() async {
               begin: Alignment.topLeft, end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(10),
-            boxShadow: [BoxShadow(color: _T.accent.withOpacity(0.3), blurRadius: 12)],
+            boxShadow: [BoxShadow(color: _T.accent.withValues(alpha: 0.3), blurRadius: 12)],
           ),
           child: const Icon(Icons.monitor_heart_rounded, color: Colors.white, size: 20),
         ),
@@ -206,7 +206,7 @@ Future<void> _loadStats() async {
           child: Row(children: [
             Container(
               width: 28, height: 28,
-              decoration: BoxDecoration(color: _T.accent.withOpacity(0.15), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: _T.accent.withValues(alpha: 0.15), shape: BoxShape.circle),
               child: const Icon(Icons.person_rounded, color: _T.accent, size: 16),
             ),
             const SizedBox(width: 8),
@@ -227,8 +227,8 @@ Future<void> _loadStats() async {
         icon: Icon(icon, size: 16, color: color),
         label: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
         style: TextButton.styleFrom(
-          backgroundColor: color.withOpacity(0.08),
-          side: BorderSide(color: color.withOpacity(0.2)),
+          backgroundColor: color.withValues(alpha: 0.08),
+          side: BorderSide(color: color.withValues(alpha: 0.2)),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         ),
@@ -248,11 +248,11 @@ Future<void> _loadStats() async {
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [_T.accent.withOpacity(0.15), _T.purple.withOpacity(0.10)],
+              colors: [_T.accent.withValues(alpha: 0.15), _T.purple.withValues(alpha: 0.10)],
               begin: Alignment.topLeft, end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _T.accent.withOpacity(0.2)),
+            border: Border.all(color: _T.accent.withValues(alpha: 0.2)),
           ),
           child: Row(children: [
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -265,11 +265,12 @@ Future<void> _loadStats() async {
               Wrap(spacing: 10, runSpacing: 10, children: [
                 _bannerBtn(Icons.bar_chart_rounded,      'Analytics',    _T.accent,  () => _go(const AnalyticsPage())),
                 _bannerBtn(Icons.hub_rounded,            'Clustering',   _T.purple,  () => _go(ClusteringPage())),
-                _bannerBtn(Icons.summarize_rounded,      'Reports & AI', _T.orange,  () => _go(const ReportsAndChatbotPage())),
+                _bannerBtn(Icons.summarize_rounded,      'Reports', _T.orange,  () => _go(ReportsPage())),
+                _bannerBtn(Icons.blur_circular_rounded,  'Risk Pattern', _T.red,    () => _go(const RiskPatternPage())),
               ]),
             ])),
             const SizedBox(width: 20),
-            Icon(Icons.analytics_rounded, size: 72, color: _T.accent.withOpacity(0.25)),
+            Icon(Icons.analytics_rounded, size: 72, color: _T.accent.withValues(alpha: 0.25)),
           ]),
         ),
         const SizedBox(height: 24),
@@ -315,10 +316,11 @@ Future<void> _loadStats() async {
       Positioned(
         bottom: 24, right: 24,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
-          _mobileFab(Icons.summarize_rounded,   'Reports & AI', _T.orange,  () => _go(const ReportsAndChatbotPage())),
+          _mobileFab(Icons.blur_circular_rounded, 'Risk Pattern', _T.red,    () => _go(RiskPatternPage())),
+          const SizedBox(height: 10),
+          _mobileFab(Icons.summarize_rounded,   'Reports', _T.orange,  () => _go(ReportsPage())),
           const SizedBox(height: 10),
           _mobileFab(Icons.hub_rounded,          'Clustering',   _T.purple,  () => _go(ClusteringPage())),
-          const SizedBox(height: 10),
           const SizedBox(height: 10),
           FloatingActionButton.extended(
             heroTag: 'analytics',
@@ -338,7 +340,7 @@ Future<void> _loadStats() async {
       FloatingActionButton.extended(
         heroTag: label,
         onPressed: onTap,
-        backgroundColor: color.withOpacity(0.9),
+        backgroundColor: color.withValues(alpha: 0.9),
         foregroundColor: _T.bg,
         icon: Icon(icon, size: 18),
         label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
@@ -365,13 +367,13 @@ Future<void> _loadStats() async {
           decoration: BoxDecoration(
             color: _T.surface, borderRadius: BorderRadius.circular(14),
             border: Border.all(color: _T.border),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 3))],
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 3))],
           ),
           padding: const EdgeInsets.all(16),
           child: Row(children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: s.$3.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(color: s.$3.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
               child: Icon(s.$4, color: s.$3, size: 22),
             ),
             const SizedBox(width: 14),
@@ -387,7 +389,7 @@ Future<void> _loadStats() async {
   }
 
   // ─────────────────────────────────────────────
-  //  MENU GRID — ALL 6 CARDS
+  //  MENU GRID — ALL CARDS
   // ─────────────────────────────────────────────
   Widget _buildMenuGrid() {
     final items = [
@@ -407,10 +409,17 @@ Future<void> _loadStats() async {
       ),
       _MenuItem(
         Icons.summarize_rounded,
-        'Reports & AI Assistant',
-        'Export reports · Chat with your data',
+        'Reports',
+        'Export reports·',
         _T.orange,
-        () => _go(const ReportsAndChatbotPage()),
+        () => _go(ReportsPage()),
+      ),
+      _MenuItem(
+        Icons.blur_circular_rounded,
+        'Risk Pattern',
+        'Sunburst map · Deaths by area · Diseases',
+        _T.red,
+        () => _go(RiskPatternPage()),
       ),
       _MenuItem(
         Icons.lock_reset_rounded,
@@ -447,15 +456,15 @@ Future<void> _loadStats() async {
         decoration: BoxDecoration(
           color: _T.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: item.color.withOpacity(0.2)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 3))],
+          border: Border.all(color: item.color.withValues(alpha: 0.2)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 10, offset: const Offset(0, 3))],
         ),
         padding: const EdgeInsets.all(18),
         child: Row(children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: item.color.withOpacity(0.12),
+              color: item.color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(item.icon, color: item.color, size: 24),
@@ -466,7 +475,7 @@ Future<void> _loadStats() async {
             const SizedBox(height: 4),
             Text(item.subtitle, style: const TextStyle(color: _T.muted, fontSize: 11)),
           ])),
-          Icon(Icons.arrow_forward_ios_rounded, color: item.color.withOpacity(0.5), size: 14),
+          Icon(Icons.arrow_forward_ios_rounded, color: item.color.withValues(alpha: 0.5), size: 14),
         ]),
       ),
     );
@@ -511,7 +520,7 @@ class _ConfirmDialog extends StatelessWidget {
       title: Row(children: [
         Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: confirmColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+          decoration: BoxDecoration(color: confirmColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
           child: Icon(icon, color: confirmColor, size: 20),
         ),
         const SizedBox(width: 12),
@@ -605,7 +614,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
             Row(children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: const Color(0xFF818CF8).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                decoration: BoxDecoration(color: const Color(0xFF818CF8).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
                 child: const Icon(Icons.lock_reset_rounded, color: Color(0xFF818CF8), size: 22),
               ),
               const SizedBox(width: 12),
@@ -723,9 +732,9 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
     margin: const EdgeInsets.only(bottom: 14),
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.1),
+      color: color.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: color.withOpacity(0.3)),
+      border: Border.all(color: color.withValues(alpha: 0.3)),
     ),
     child: Row(children: [
       Icon(icon, color: color, size: 16),
