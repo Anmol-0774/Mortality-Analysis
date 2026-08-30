@@ -249,16 +249,21 @@ List<String> get _trendLocalities {
  String _normalizeTrendValue(String value) {
   return value.trim().toLowerCase();
 }
- 
-  Future<void> _fetchData() async {
-    if (mounted) {
-      setState(() {
-        _loading = true;
-        _error = null;
-      });
-    }
+ Future<void> _fetchData() async {
+  if (mounted) {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+  }
 
-    try {
+  try {
+    const pageSize = 1000;
+    int from = 0;
+
+    final List<Map<String, dynamic>> allRows = [];
+
+    while (true) {
       final res = await _sb
           .from(_table)
           .select(
@@ -268,46 +273,82 @@ List<String> get _trendLocalities {
           )
           .eq('is_valid', true)
           .gte('quality_score', 60)
-          .limit(10000);
+          .range(from, from + pageSize - 1);
 
-      _allData = List<Map<String, dynamic>>.from(res as List);
+      final rows = List<Map<String, dynamic>>.from(res);
 
-      _districts = _allData
-          .map((r) => r['district']?.toString() ?? '')
-          .where((d) => d.isNotEmpty && d != 'Unknown')
-          .toSet()
-          .toList()
-        ..sort();
+      allRows.addAll(rows);
 
-      _years = _allData
-          .map((r) => (r['date_of_death']?.toString() ?? '').length >= 4
-              ? r['date_of_death'].toString().substring(0, 4)
-              : '')
-          .where((y) => y.length == 4)
-          .toSet()
-          .toList()
-        ..sort();
+      if (rows.length < pageSize) {
+        break;
+      }
 
-      _allDiseases = _allData
-          .map((r) => r['cause_of_death']?.toString().trim() ?? '')
-          .where((d) =>
+      from += pageSize;
+    }
+
+    _allData = allRows;
+
+    // Districts
+    _districts = _allData
+        .map((r) => r['district']?.toString() ?? '')
+        .where(
+          (d) =>
               d.isNotEmpty &&
               d.toLowerCase() != 'unknown' &&
-              d.toLowerCase() != 'unspecified')
-          .toSet()
-          .toList()
-        ..sort();
+              d.toLowerCase() != 'unspecified',
+        )
+        .toSet()
+        .toList()
+      ..sort();
 
-      _applyFilters();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _loading = false;
-        });
+    // Years
+    _years = _allData
+        .map(
+          (r) =>
+              (r['date_of_death']?.toString() ?? '').length >= 4
+                  ? r['date_of_death']
+                      .toString()
+                      .substring(0, 4)
+                  : '',
+        )
+        .where((y) => y.length == 4)
+        .toSet()
+        .toList()
+      ..sort();
+
+    // Diseases
+    final uniqueDiseases = <String, String>{};
+
+    for (final r in _allData) {
+      final disease =
+          r['cause_of_death']?.toString().trim() ?? '';
+
+      if (disease.isEmpty) continue;
+
+      final normalized = disease.toLowerCase();
+
+      if (normalized == 'unknown' ||
+          normalized == 'unspecified' ||
+          normalized == 'other') {
+        continue;
       }
+
+      // Case-insensitive uniqueness
+      uniqueDiseases.putIfAbsent(normalized, () => disease);
+    }
+
+    _allDiseases = uniqueDiseases.values.toList()..sort();
+
+    _applyFilters();
+  } catch (e) {
+    if (mounted) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
+}
 
   // ═══════════════════════════════════════════════════════
   // FILTER
