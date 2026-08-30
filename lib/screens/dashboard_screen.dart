@@ -43,55 +43,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   WebViewController? _controller;
   bool _webViewLoading = true;
 
-  // Stats
-  int    _totalRecords  = 0;
-  int    _validRecords  = 0;
-  int    _flaggedRecords = 0;
-  double _avgQuality    = 0;
-  bool   _statsLoading  = true;
-
   @override
   void initState() {
     super.initState();
-    _loadStats();
+
     if (!kIsWeb) _loadHtml();
   }
-
-Future<void> _loadStats() async {
-  setState(() => _statsLoading = true);
-
-  try {
-    final res = await _sb
-        .from('mortality_records_clean')
-        .select('quality_score, is_valid');
-
-    final data = List<Map<String, dynamic>>.from(res as List);
-
-    final scores = data
-        .map((r) => r['quality_score'])
-        .whereType<num>()
-        .toList();
-
-    final valid = data.where((r) => r['is_valid'] == true).length;
-    final flagged = data.where((r) => r['is_valid'] == false).length;
-
-    final avg = scores.isEmpty
-        ? 0.0
-        : scores.reduce((a, b) => a + b) / scores.length;
-
-    setState(() {
-      _totalRecords = data.length;
-      _validRecords = valid;
-      _flaggedRecords = flagged;
-      _avgQuality = avg;
-      _statsLoading = false;
-    });
-  } catch (e) {
-    setState(() => _statsLoading = false);
-    debugPrint('Stats error: $e');
-  }
-}
- 
   // ─────────────────────────────────────────────
   //  LOAD HTML (mobile only)
   // ─────────────────────────────────────────────
@@ -273,11 +230,6 @@ Future<void> _loadStats() async {
             Icon(Icons.analytics_rounded, size: 72, color: _T.accent.withValues(alpha: 0.25)),
           ]),
         ),
-        const SizedBox(height: 24),
-
-        // ── Stats Row
-        _buildStatsRow(),
-        const SizedBox(height: 24),
 
         // ── Menu Grid
         const Text('Quick Actions', style: TextStyle(color: _T.muted, fontSize: 11, letterSpacing: 1.5, fontWeight: FontWeight.w600)),
@@ -346,47 +298,6 @@ Future<void> _loadStats() async {
         label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
         elevation: 4,
       );
-
-  // ─────────────────────────────────────────────
-  //  STATS ROW
-  // ─────────────────────────────────────────────
-  Widget _buildStatsRow() {
-    final stats = [
-      ('Total Records', _statsLoading ? '…' : '$_totalRecords',                      _T.accent,  Icons.storage_rounded),
-      ('Valid Records', _statsLoading ? '…' : '$_validRecords',                      _T.green,   Icons.verified_rounded),
-      ('Flagged',       _statsLoading ? '…' : '$_flaggedRecords',                    _T.red,     Icons.flag_rounded),
-      ('Avg Quality',   _statsLoading ? '…' : '${_avgQuality.toStringAsFixed(0)}%',  _T.orange,  Icons.star_rounded),
-    ];
-    return LayoutBuilder(builder: (ctx, box) {
-      final cols = box.maxWidth > 700 ? 4 : box.maxWidth > 400 ? 2 : 1;
-      return GridView.count(
-        crossAxisCount: cols, shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisSpacing: 14, mainAxisSpacing: 14, childAspectRatio: 2.4,
-        children: stats.map((s) => Container(
-          decoration: BoxDecoration(
-            color: _T.surface, borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _T.border),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 3))],
-          ),
-          padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: s.$3.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-              child: Icon(s.$4, color: s.$3, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text(s.$1, style: const TextStyle(color: _T.muted, fontSize: 11)),
-              const SizedBox(height: 3),
-              Text(s.$2, style: TextStyle(color: s.$3, fontSize: 22, fontWeight: FontWeight.bold)),
-            ]),
-          ]),
-        )).toList(),
-      );
-    });
-  }
 
   // ─────────────────────────────────────────────
   //  MENU GRID — ALL CARDS
