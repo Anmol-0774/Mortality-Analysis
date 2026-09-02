@@ -223,7 +223,7 @@ void dispose() {
 List<String> get _trendLocalities {
   final unique = <String, String>{};
 
-  for (final r in _allData) {
+  for (final r in _filtered) {
     final locality = r['specific_locality']?.toString().trim() ?? '';
 
     if (locality.isEmpty ||
@@ -650,6 +650,8 @@ List<String> get _trendLocalities {
   // ═══════════════════════════════════════════════════════
   // CITY DISEASE TREND
   // ═══════════════════════════════════════════════════════
+
+
 List<_TD> get _cityDiseaseTrend {
   if (_trendDisease == null) return [];
 
@@ -665,8 +667,11 @@ List<_TD> get _cityDiseaseTrend {
   final selectedLocality =
       (_trendLocality ?? '').trim().toLowerCase();
 
+  // IMPORTANT:
+  // Use _filtered instead of _allData so the top global
+  // filters (District, City/Village, Year) affect this trend too.
   return _years.map((y) {
-    final count = _allData.where((r) {
+    final count = _filtered.where((r) {
       // -----------------------------
       // Disease matching
       // -----------------------------
@@ -693,6 +698,9 @@ List<_TD> get _cityDiseaseTrend {
       // -----------------------------
       // Locality matching
       // -----------------------------
+      // This is the LOCAL trend filter.
+      // The top City/Village filter is already applied
+      // because we are using _filtered.
       if (selectedLocality.isNotEmpty) {
         final recordLocality =
             r['specific_locality']?.toString().trim().toLowerCase() ?? '';
@@ -3246,6 +3254,11 @@ Widget _buildCityDiseaseTrend() {
     ),
   );
 }
+
+
+
+
+
 
 
   Widget _statPill(String label, String value, Color color) => Expanded(
