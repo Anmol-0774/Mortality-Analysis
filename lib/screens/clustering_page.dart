@@ -228,16 +228,18 @@ class _ClusteringPageState extends State<ClusteringPage> {
       return;
     }
 
-    final rng = Random(42); // fixed seed for reproducibility
+  final rng = Random(42); // fixed seed for reproducibility
 
-    // Initialize centroids: pick k points spread across mortality range
-    final sorted = List<_LocalityPoint>.from(_points)
-      ..sort((a, b) => a.mortalityRate.compareTo(b.mortalityRate));
-    final step = sorted.length ~/ k;
-    List<List<double>> centroids = List.generate(k, (i) {
-      final p = sorted[(i * step).clamp(0, sorted.length - 1)];
-      return List<double>.from(p.features);
-    });
+// Initialize centroids: pick k points spread across mortality range
+final sorted = List<_LocalityPoint>.from(_points)
+  ..sort((a, b) => a.mortalityRate.compareTo(b.mortalityRate));
+
+final step = sorted.length ~/ k;
+
+List<List<double>> centroids = List.generate(k, (i) {
+  final p = sorted[(i * step).clamp(0, sorted.length - 1)];
+  return List<double>.from(p.features);
+});
 
     int iter = 0;
     bool changed = true;

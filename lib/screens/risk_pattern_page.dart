@@ -113,87 +113,180 @@ class _RiskPatternPageState extends State<RiskPatternPage> {
   //  LOAD + BUILD TREE
   // ─────────────────────────────────────────────
   Future<void> _loadData() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-      _selected = null;
-    });
+  setState(() {
+    _loading = true;
+    _error = null;
+    _selected = null;
+  });
 
-    try {
+  try {
+    const int pageSize = 1000;
+    int offset = 0;
+    final List<Map<String, dynamic>> allData = [];
+
+    while (true) {
       final res = await _sb
           .from('mortality_records_clean')
-          .select('province, district, tehsil, area_type, specific_locality, '
-              'cause_of_death, quality_score')
+          .select(
+            'province, district, tehsil, area_type, '
+            'specific_locality, cause_of_death, '
+            'quality_score, is_valid, date_of_death',
+          )
+          .eq('is_valid', true)
           .gte('quality_score', 60)
-          .limit(10000);
+          .range(offset, offset + pageSize - 1);
 
-      final data = List<Map<String, dynamic>>.from(res as List);
+      final page = List<Map<String, dynamic>>.from(res);
 
-      final root = _Node(name: 'All', level: 0);
-
-      String clean(dynamic v, String fallback) {
-        final s = v?.toString().trim() ?? '';
-        return s.isEmpty ? fallback : s;
+      if (page.isEmpty) {
+        break;
       }
 
-      for (final r in data) {
-        final province = clean(r['province'], 'Unknown Province');
-        final district = clean(r['district'], 'Unknown District');
-        final tehsil   = clean(r['tehsil'], 'Unknown Tehsil');
-        final areaType = clean(r['area_type'], 'Unknown Area Type');
-        // Outermost ring: the exact specific_locality value from the schema.
-        final locality = clean(r['specific_locality'], 'Locality Not Specified');
-        final cause    = r['cause_of_death']?.toString().trim() ?? '';
+      allData.addAll(page);
 
-        final nProvince = root.child(province);
-        final nDistrict = nProvince.child(district);
-        final nTehsil   = nDistrict.child(tehsil);
-        final nArea     = nTehsil.child(areaType);
-        final nLocality = nArea.child(locality);
-
-        for (final n in [root, nProvince, nDistrict, nTehsil, nArea, nLocality]) {
-          n.deaths += 1;
-          if (cause.isNotEmpty && cause != 'Unspecified' && cause != 'Unknown') {
-            n.causeCounts[cause] = (n.causeCounts[cause] ?? 0) + 1;
-          }
-        }
+      // Continue fetching until all records are retrieved.
+      if (page.length < pageSize) {
+        break;
       }
 
-      if (root.deaths == 0) {
-        setState(() {
-          _error = 'No records found to build the pattern.';
-          _loading = false;
-        });
-        return;
-      }
-
-      _layout(root, -pi / 2, 2 * pi); // start at 12 o'clock, looks nicer
-
-      // Flatten + compute per-ring max for color normalization
-      _flatNodes = [];
-      _ringMaxDeaths = {};
-      void collect(_Node n) {
-        if (n.level > 0) {
-          _flatNodes.add(n);
-          _ringMaxDeaths[n.level] = max(_ringMaxDeaths[n.level] ?? 0, n.deaths);
-        }
-        for (final c in n.children) {
-          collect(c);
-        }
-      }
-      collect(root);
-
-      setState(() {
-        _root = root;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      offset += pageSize;
     }
+
+    final root = _Node(name: 'All', level: 0);
+
+    // Handles missing, empty, and placeholder values.
+String cleanValue(
+  dynamic value, {
+  required String fallback,
+}) {
+  final s = value?.toString().trim() ?? '';
+
+  if (s.isEmpty) {
+    return fallback;
   }
+
+  final normalized = s.toLowerCase();
+
+  const invalidValues = {
+    'unknown',
+    'n/a',
+    'na',
+    'n.a.',
+    'null',
+    'none',
+    'nil',
+    'not available',
+    'not specified',
+    'unspecified',
+    'not provided',
+    'not recorded',
+    'missing',
+    '-',
+    '--',
+    '---',
+  };
+
+  if (invalidValues.contains(normalized)) {
+    return fallback;
+  }
+
+  return s;
+}
+    for (final r in allData) {
+      final province = cleanValue(
+        r['province'],
+        fallback: 'Not Specified',
+      );
+
+      final district = cleanValue(
+        r['district'],
+        fallback: 'Not Specified',
+      );
+
+      final tehsil = cleanValue(
+        r['tehsil'],
+        fallback: 'Not Specified',
+      );
+
+      final areaType = cleanValue(
+        r['area_type'],
+        fallback: 'Not Specified',
+      );
+
+      final locality = cleanValue(
+        r['specific_locality'],
+        fallback: 'Not Specified',
+      );
+
+      final cause = cleanValue(
+        r['cause_of_death'],
+        fallback: 'Cause Not Specified',
+      );
+
+      final nProvince = root.child(province);
+      final nDistrict = nProvince.child(district);
+      final nTehsil = nDistrict.child(tehsil);
+      final nArea = nTehsil.child(areaType);
+      final nLocality = nArea.child(locality);
+
+      final nodes = [
+        root,
+        nProvince,
+        nDistrict,
+        nTehsil,
+        nArea,
+        nLocality,
+      ];
+
+      for (final n in nodes) {
+        n.deaths += 1;
+        n.causeCounts[cause] =
+            (n.causeCounts[cause] ?? 0) + 1;
+      }
+    }
+
+    if (root.deaths == 0) {
+      setState(() {
+        _error = 'No valid records found to build the pattern.';
+        _loading = false;
+      });
+      return;
+    }
+
+    _layout(root, -pi / 2, 2 * pi);
+
+    _flatNodes = [];
+    _ringMaxDeaths = {};
+
+    void collect(_Node n) {
+      if (n.level > 0) {
+        _flatNodes.add(n);
+
+        _ringMaxDeaths[n.level] = max(
+          _ringMaxDeaths[n.level] ?? 0,
+          n.deaths,
+        );
+      }
+
+      for (final c in n.children) {
+        collect(c);
+      }
+    }
+
+    collect(root);
+
+    setState(() {
+      _root = root;
+      _loading = false;
+    });
+  } catch (e) {
+    setState(() {
+      _error = 'Unable to load mortality data: $e';
+      _loading = false;
+    });
+  }
+}
+
 
   // Classic sunburst layout: partition a parent's angular span among children by weight
   void _layout(_Node node, double startAngle, double sweepAngle) {

@@ -131,13 +131,20 @@ class _ReportsTabState extends State<_ReportsTab> {
   // LOAD DATA FROM SUPABASE
   // ═══════════════════════════════════════════════════════
 
-  Future<void> _loadData() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+Future<void> _loadData() async {
+  setState(() {
+    _loading = true;
+    _error = null;
+  });
 
-    try {
+  try {
+    // ── Fetch ALL records in batches instead of limiting to 10,000
+    const int pageSize = 1000;
+    int offset = 0;
+
+    final List<Map<String, dynamic>> data = [];
+
+    while (true) {
       final res = await _sb
           .from('mortality_records_clean')
           .select(
@@ -145,159 +152,176 @@ class _ReportsTabState extends State<_ReportsTab> {
             'date_of_death,quality_score',
           )
           .gte('quality_score', 60)
-          .limit(10000);
+          .range(offset, offset + pageSize - 1);
 
-      final data = List<Map<String, dynamic>>.from(res as List);
+      final page = List<Map<String, dynamic>>.from(res);
 
-      // ── Basic counts
-      _total = data.length;
-
-      _maleCount = data.where((r) => r['gender']?.toString() == 'Male').length;
-
-      _femaleCount =
-          data.where((r) => r['gender']?.toString() == 'Female').length;
-
-      // ── Quality tiers. Both are already inside the >= 60 filter above —
-      // this just splits records into higher- vs lower-confidence buckets.
-      _valid = data.where((r) {
-        final q = r['quality_score'];
-        return q is num && q >= 80;
-      }).length;
-
-      _flagged = data.where((r) {
-        final q = r['quality_score'];
-        return q is num && q < 80;
-      }).length;
-
-      // ── Average age
-      final ages = data
-          .map((r) {
-            final value = r['age'];
-
-            if (value is int) {
-              return value;
-            }
-
-            return int.tryParse(value?.toString() ?? '');
-          })
-          .whereType<int>()
-          .where((a) => a > 0 && a < 120)
-          .toList();
-
-      _avgAge = ages.isEmpty ? 0 : ages.reduce((a, b) => a + b) / ages.length;
-
-      // ═══════════════════════════════════════════════════
-      // CAUSE MAP
-      // ═══════════════════════════════════════════════════
-
-      _causeMap = {};
-
-      for (final r in data) {
-        final c = r['cause_of_death']?.toString() ?? '';
-
-        if (c.isNotEmpty && c != 'Unspecified' && c != 'Unknown') {
-          _causeMap[c] = (_causeMap[c] ?? 0) + 1;
-        }
+      if (page.isEmpty) {
+        break;
       }
 
-      if (_causeMap.isNotEmpty) {
-        _topCause = (_causeMap.entries.toList()
-              ..sort((a, b) => b.value.compareTo(a.value)))
-            .first
-            .key;
+      data.addAll(page);
+
+      // If fewer than 1,000 records were returned,
+      // this is the last page.
+      if (page.length < pageSize) {
+        break;
       }
 
-      // ═══════════════════════════════════════════════════
-      // DISTRICT MAP
-      // ═══════════════════════════════════════════════════
-
-      _districtMap = {};
-
-      for (final r in data) {
-        final d = r['district']?.toString() ?? '';
-
-        if (d.isNotEmpty && d != 'Unknown') {
-          _districtMap[d] = (_districtMap[d] ?? 0) + 1;
-        }
-      }
-
-      if (_districtMap.isNotEmpty) {
-        _topDistrict = (_districtMap.entries.toList()
-              ..sort((a, b) => b.value.compareTo(a.value)))
-            .first
-            .key;
-      }
-
-      // ═══════════════════════════════════════════════════
-      // LOCALITY MAP
-      // ═══════════════════════════════════════════════════
-
-      final locMap = <String, int>{};
-
-      for (final r in data) {
-        final l = r['specific_locality']?.toString() ?? '';
-
-        if (l.isNotEmpty && l != 'Not Specified') {
-          locMap[l] = (locMap[l] ?? 0) + 1;
-        }
-      }
-
-      if (locMap.isNotEmpty) {
-        _topLocality = (locMap.entries.toList()
-              ..sort((a, b) => b.value.compareTo(a.value)))
-            .first
-            .key;
-      }
-
-      // ═══════════════════════════════════════════════════
-      // MONTHLY + YEARLY MAPS
-      // ═══════════════════════════════════════════════════
-
-      _monthlyMap = {};
-      _yearlyMap = {};
-
-      final yearSet = <int>{};
-
-      for (final r in data) {
-        final dateStr = r['date_of_death']?.toString() ?? '';
-
-        if (dateStr.length >= 7) {
-          final year = int.tryParse(dateStr.substring(0, 4));
-          final month = int.tryParse(dateStr.substring(5, 7));
-
-          if (year != null) {
-            yearSet.add(year);
-
-            _yearlyMap[year.toString()] = (_yearlyMap[year.toString()] ?? 0) + 1;
-          }
-
-          if (year != null && month != null) {
-            final key = '$year-${month.toString().padLeft(2, '0')}';
-
-            _monthlyMap[key] = (_monthlyMap[key] ?? 0) + 1;
-          }
-        }
-      }
-
-      _years.clear();
-
-      _years.addAll(yearSet.toList()..sort());
-
-      if (_selYear == null && _years.isNotEmpty) {
-        _selYear = _years.last;
-      }
-
-      setState(() {
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      offset += pageSize;
     }
-  }
 
+    // ── Basic counts
+    _total = data.length;
+
+    _maleCount =
+        data.where((r) => r['gender']?.toString() == 'Male').length;
+
+    _femaleCount =
+        data.where((r) => r['gender']?.toString() == 'Female').length;
+
+    // ── Quality tiers
+    _valid = data.where((r) {
+      final q = r['quality_score'];
+      return q is num && q >= 80;
+    }).length;
+
+    _flagged = data.where((r) {
+      final q = r['quality_score'];
+      return q is num && q < 80;
+    }).length;
+
+    // ── Average age
+    final ages = data
+        .map((r) {
+          final value = r['age'];
+
+          if (value is int) {
+            return value;
+          }
+
+          return int.tryParse(value?.toString() ?? '');
+        })
+        .whereType<int>()
+        .where((a) => a > 0 && a < 120)
+        .toList();
+
+    _avgAge =
+        ages.isEmpty ? 0 : ages.reduce((a, b) => a + b) / ages.length;
+
+    // ═══════════════════════════════════════════════════
+    // CAUSE MAP
+    // ═══════════════════════════════════════════════════
+
+    _causeMap = {};
+
+    for (final r in data) {
+      final c = r['cause_of_death']?.toString() ?? '';
+
+      if (c.isNotEmpty && c != 'Unspecified' && c != 'Unknown') {
+        _causeMap[c] = (_causeMap[c] ?? 0) + 1;
+      }
+    }
+
+    if (_causeMap.isNotEmpty) {
+      _topCause = (_causeMap.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value)))
+          .first
+          .key;
+    }
+
+    // ═══════════════════════════════════════════════════
+    // DISTRICT MAP
+    // ═══════════════════════════════════════════════════
+
+    _districtMap = {};
+
+    for (final r in data) {
+      final d = r['district']?.toString() ?? '';
+
+      if (d.isNotEmpty && d != 'Unknown') {
+        _districtMap[d] = (_districtMap[d] ?? 0) + 1;
+      }
+    }
+
+    if (_districtMap.isNotEmpty) {
+      _topDistrict = (_districtMap.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value)))
+          .first
+          .key;
+    }
+
+    // ═══════════════════════════════════════════════════
+    // LOCALITY MAP
+    // ═══════════════════════════════════════════════════
+
+    final locMap = <String, int>{};
+
+    for (final r in data) {
+      final l = r['specific_locality']?.toString() ?? '';
+
+      if (l.isNotEmpty && l != 'Not Specified') {
+        locMap[l] = (locMap[l] ?? 0) + 1;
+      }
+    }
+
+    if (locMap.isNotEmpty) {
+      _topLocality = (locMap.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value)))
+          .first
+          .key;
+    }
+
+    // ═══════════════════════════════════════════════════
+    // MONTHLY + YEARLY MAPS
+    // ═══════════════════════════════════════════════════
+
+    _monthlyMap = {};
+    _yearlyMap = {};
+
+    final yearSet = <int>{};
+
+    for (final r in data) {
+      final dateStr = r['date_of_death']?.toString() ?? '';
+
+      if (dateStr.length >= 7) {
+        final year = int.tryParse(dateStr.substring(0, 4));
+        final month = int.tryParse(dateStr.substring(5, 7));
+
+        if (year != null) {
+          yearSet.add(year);
+
+          _yearlyMap[year.toString()] =
+              (_yearlyMap[year.toString()] ?? 0) + 1;
+        }
+
+        if (year != null && month != null) {
+          final key =
+              '$year-${month.toString().padLeft(2, '0')}';
+
+          _monthlyMap[key] =
+              (_monthlyMap[key] ?? 0) + 1;
+        }
+      }
+    }
+
+    _years.clear();
+    _years.addAll(yearSet.toList()..sort());
+
+    if (_selYear == null && _years.isNotEmpty) {
+      _selYear = _years.last;
+    }
+
+    setState(() {
+      _loading = false;
+    });
+  } catch (e) {
+    setState(() {
+      _error = e.toString();
+      _loading = false;
+    });
+  }
+}
   // ═══════════════════════════════════════════════════════
   // BUILD REPORT TEXT
   // ═══════════════════════════════════════════════════════
