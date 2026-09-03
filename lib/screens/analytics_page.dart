@@ -59,14 +59,6 @@ class _DA {
   _DA(this.disease, this.ageGroup, this.count);
 }
 
-/// Disease + Gender
-class _DG {
-  final String disease;
-  final String gender;
-  final double count;
-  _DG(this.disease, this.gender, this.count);
-}
-
 /// Disease + Comorbidity combination
 class _Combo {
   final String disease;
@@ -112,6 +104,9 @@ class _T {
   static const orange = Color(0xFFFB923C);
   static const red = Color(0xFFF87171);
   static const pink = Color(0xFFF472B6);
+  // Added for the new geographic (Mortality by District) chart, so it
+  // reads as its own category rather than reusing an existing chart's color.
+  static const cyan = Color(0xFF22D3EE);
 
   // Dedicated, consistent gender colors used everywhere a
   // male/female breakdown is shown so users can read charts
@@ -192,10 +187,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   String? _selYear;
 
   // Disease-by-city trend filters (independent)
-  // Disease-by-city trend filters (independent)
-String? _trendDisease;
-String? _trendLocality;
-final _trendOtherDiseaseCtrl = TextEditingController();
+  String? _trendDisease;
+  String? _trendLocality;
+  final _trendOtherDiseaseCtrl = TextEditingController();
 
   List<String> _districts = [];
   List<String> _years = [];
@@ -211,144 +205,148 @@ final _trendOtherDiseaseCtrl = TextEditingController();
     super.initState();
     _fetchData();
   }
-@override
-void dispose() {
-  _localityCtrl.dispose();
-  _trendOtherDiseaseCtrl.dispose();
-  super.dispose();
-}
+
+  @override
+  void dispose() {
+    _localityCtrl.dispose();
+    _trendOtherDiseaseCtrl.dispose();
+    super.dispose();
+  }
+
   // ═══════════════════════════════════════════════════════
   // FETCH
   // ═══════════════════════════════════════════════════════
-List<String> get _trendLocalities {
-  final unique = <String, String>{};
 
-  for (final r in _filtered) {
-    final locality = r['specific_locality']?.toString().trim() ?? '';
+  List<String> get _trendLocalities {
+    final unique = <String, String>{};
 
-    if (locality.isEmpty ||
-        locality.toLowerCase() == 'unknown' ||
-        locality.toLowerCase() == 'unspecified') {
-      continue;
-    }
+    for (final r in _filtered) {
+      final locality = r['specific_locality']?.toString().trim() ?? '';
 
-    // Case-insensitive uniqueness.
-    // Keeps the first original spelling for display.
-    unique.putIfAbsent(locality.toLowerCase(), () => locality);
-  }
-
-  final result = unique.values.toList();
-
-  result.sort(
-    (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
-  );
-
-  return result;
-}
- 
- String _normalizeTrendValue(String value) {
-  return value.trim().toLowerCase();
-}
- Future<void> _fetchData() async {
-  if (mounted) {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-  }
-
-  try {
-    const pageSize = 1000;
-    int from = 0;
-
-    final List<Map<String, dynamic>> allRows = [];
-
-    while (true) {
-      final res = await _sb
-          .from(_table)
-          .select(
-            'age,gender,district,specific_locality,cause_of_death,'
-            'prior_medical_conditions,place_of_death,water_source,'
-            'income_bracket,date_of_death,is_valid,quality_score',
-          )
-          .eq('is_valid', true)
-          .gte('quality_score', 60)
-          .range(from, from + pageSize - 1);
-
-      final rows = List<Map<String, dynamic>>.from(res);
-
-      allRows.addAll(rows);
-
-      if (rows.length < pageSize) {
-        break;
-      }
-
-      from += pageSize;
-    }
-
-    _allData = allRows;
-
-    // Districts
-    _districts = _allData
-        .map((r) => r['district']?.toString() ?? '')
-        .where(
-          (d) =>
-              d.isNotEmpty &&
-              d.toLowerCase() != 'unknown' &&
-              d.toLowerCase() != 'unspecified',
-        )
-        .toSet()
-        .toList()
-      ..sort();
-
-    // Years
-    _years = _allData
-        .map(
-          (r) =>
-              (r['date_of_death']?.toString() ?? '').length >= 4
-                  ? r['date_of_death']
-                      .toString()
-                      .substring(0, 4)
-                  : '',
-        )
-        .where((y) => y.length == 4)
-        .toSet()
-        .toList()
-      ..sort();
-
-    // Diseases
-    final uniqueDiseases = <String, String>{};
-
-    for (final r in _allData) {
-      final disease =
-          r['cause_of_death']?.toString().trim() ?? '';
-
-      if (disease.isEmpty) continue;
-
-      final normalized = disease.toLowerCase();
-
-      if (normalized == 'unknown' ||
-          normalized == 'unspecified' ||
-          normalized == 'other') {
+      if (locality.isEmpty ||
+          locality.toLowerCase() == 'unknown' ||
+          locality.toLowerCase() == 'unspecified') {
         continue;
       }
 
-      // Case-insensitive uniqueness
-      uniqueDiseases.putIfAbsent(normalized, () => disease);
+      // Case-insensitive uniqueness.
+      // Keeps the first original spelling for display.
+      unique.putIfAbsent(locality.toLowerCase(), () => locality);
     }
 
-    _allDiseases = uniqueDiseases.values.toList()..sort();
+    final result = unique.values.toList();
 
-    _applyFilters();
-  } catch (e) {
+    result.sort(
+      (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+    );
+
+    return result;
+  }
+
+  String _normalizeTrendValue(String value) {
+    return value.trim().toLowerCase();
+  }
+
+  Future<void> _fetchData() async {
     if (mounted) {
       setState(() {
-        _error = e.toString();
-        _loading = false;
+        _loading = true;
+        _error = null;
       });
     }
+
+    try {
+      const pageSize = 1000;
+      int from = 0;
+
+      final List<Map<String, dynamic>> allRows = [];
+
+      while (true) {
+        final res = await _sb
+            .from(_table)
+            .select(
+              'age,gender,district,specific_locality,cause_of_death,'
+              'prior_medical_conditions,place_of_death,water_source,'
+              'income_bracket,date_of_death,is_valid,quality_score',
+            )
+            .eq('is_valid', true)
+            .gte('quality_score', 60)
+            .range(from, from + pageSize - 1);
+
+        final rows = List<Map<String, dynamic>>.from(res);
+
+        allRows.addAll(rows);
+
+        if (rows.length < pageSize) {
+          break;
+        }
+
+        from += pageSize;
+      }
+
+      _allData = allRows;
+
+      // Districts
+      _districts = _allData
+          .map((r) => r['district']?.toString() ?? '')
+          .where(
+            (d) =>
+                d.isNotEmpty &&
+                d.toLowerCase() != 'unknown' &&
+                d.toLowerCase() != 'unspecified',
+          )
+          .toSet()
+          .toList()
+        ..sort();
+
+      // Years
+      _years = _allData
+          .map(
+            (r) =>
+                (r['date_of_death']?.toString() ?? '').length >= 4
+                    ? r['date_of_death']
+                        .toString()
+                        .substring(0, 4)
+                    : '',
+          )
+          .where((y) => y.length == 4)
+          .toSet()
+          .toList()
+        ..sort();
+
+      // Diseases
+      final uniqueDiseases = <String, String>{};
+
+      for (final r in _allData) {
+        final disease =
+            r['cause_of_death']?.toString().trim() ?? '';
+
+        if (disease.isEmpty) continue;
+
+        final normalized = disease.toLowerCase();
+
+        if (normalized == 'unknown' ||
+            normalized == 'unspecified' ||
+            normalized == 'other') {
+          continue;
+        }
+
+        // Case-insensitive uniqueness
+        uniqueDiseases.putIfAbsent(normalized, () => disease);
+      }
+
+      _allDiseases = uniqueDiseases.values.toList()..sort();
+
+      _applyFilters();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
   }
-}
 
   // ═══════════════════════════════════════════════════════
   // FILTER
@@ -614,6 +612,15 @@ List<String> get _trendLocalities {
     return c.entries.map((e) => _CD(e.key, e.value.toDouble())).toList();
   }
 
+  // NEW — Improvement 2: dedicated geographic comparison chart.
+  // Counts deaths by district (same field the global filter bar already
+  // uses), sorted descending, top 12 kept so the chart stays legible.
+  List<_CD> get _districtData {
+    final c = _countBy(_filtered, 'district');
+    final s = c.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    return s.take(12).map((e) => _CD(e.key, e.value.toDouble())).toList();
+  }
+
   /// Full disease name preserved; the chart shortens only for
   /// the visible axis label, tooltip shows the full text.
   List<_CD> get _ageDiseaseData {
@@ -647,77 +654,82 @@ List<String> get _trendLocalities {
     }).toList();
   }
 
+  // NEW — Improvement 3: overall mortality trend, independent of any
+  // single disease. Answers "is total mortality rising or falling?"
+  // as distinct from the disease-specific trends below.
+  List<_TD> get _yearlyMortalityTrend {
+    return _years.map((y) {
+      final count = _filtered
+          .where((r) =>
+              (r['date_of_death']?.toString() ?? '').startsWith(y))
+          .length;
+      return _TD(y, count.toDouble());
+    }).toList();
+  }
+
   // ═══════════════════════════════════════════════════════
   // CITY DISEASE TREND
   // ═══════════════════════════════════════════════════════
 
+  List<_TD> get _cityDiseaseTrend {
+    if (_trendDisease == null) return [];
 
-List<_TD> get _cityDiseaseTrend {
-  if (_trendDisease == null) return [];
+    final selectedDisease = _trendDisease == 'Other'
+        ? _trendOtherDiseaseCtrl.text.trim()
+        : (_trendDisease ?? '').trim();
 
-  final selectedDisease = _trendDisease == 'Other'
-      ? _trendOtherDiseaseCtrl.text.trim()
-      : (_trendDisease ?? '').trim();
+    if (selectedDisease.isEmpty) return [];
 
-  if (selectedDisease.isEmpty) return [];
+    final selectedDiseaseNormalized = _normalizeTrendValue(selectedDisease);
 
-  final selectedDiseaseNormalized =
-      _normalizeTrendValue(selectedDisease);
+    final selectedLocality = (_trendLocality ?? '').trim().toLowerCase();
 
-  final selectedLocality =
-      (_trendLocality ?? '').trim().toLowerCase();
+    // IMPORTANT:
+    // Use _filtered instead of _allData so the top global
+    // filters (District, City/Village, Year) affect this trend too.
+    return _years.map((y) {
+      final count = _filtered.where((r) {
+        // -----------------------------
+        // Disease matching
+        // -----------------------------
+        final recordDisease = r['cause_of_death']?.toString().trim() ?? '';
 
-  // IMPORTANT:
-  // Use _filtered instead of _allData so the top global
-  // filters (District, City/Village, Year) affect this trend too.
-  return _years.map((y) {
-    final count = _filtered.where((r) {
-      // -----------------------------
-      // Disease matching
-      // -----------------------------
-      final recordDisease =
-          r['cause_of_death']?.toString().trim() ?? '';
+        if (recordDisease.isEmpty) return false;
 
-      if (recordDisease.isEmpty) return false;
-
-      if (_normalizeTrendValue(recordDisease) !=
-          selectedDiseaseNormalized) {
-        return false;
-      }
-
-      // -----------------------------
-      // Year matching
-      // -----------------------------
-      final date =
-          r['date_of_death']?.toString() ?? '';
-
-      if (!date.startsWith(y)) {
-        return false;
-      }
-
-      // -----------------------------
-      // Locality matching
-      // -----------------------------
-      // This is the LOCAL trend filter.
-      // The top City/Village filter is already applied
-      // because we are using _filtered.
-      if (selectedLocality.isNotEmpty) {
-        final recordLocality =
-            r['specific_locality']?.toString().trim().toLowerCase() ?? '';
-
-        if (recordLocality != selectedLocality) {
+        if (_normalizeTrendValue(recordDisease) != selectedDiseaseNormalized) {
           return false;
         }
-      }
 
-      return true;
-    }).length;
+        // -----------------------------
+        // Year matching
+        // -----------------------------
+        final date = r['date_of_death']?.toString() ?? '';
 
-    return _TD(y, count.toDouble());
-  }).toList();
-}
+        if (!date.startsWith(y)) {
+          return false;
+        }
 
+        // -----------------------------
+        // Locality matching
+        // -----------------------------
+        // This is the LOCAL trend filter.
+        // The top City/Village filter is already applied
+        // because we are using _filtered.
+        if (selectedLocality.isNotEmpty) {
+          final recordLocality =
+              r['specific_locality']?.toString().trim().toLowerCase() ?? '';
 
+          if (recordLocality != selectedLocality) {
+            return false;
+          }
+        }
+
+        return true;
+      }).length;
+
+      return _TD(y, count.toDouble());
+    }).toList();
+  }
 
   String _cityTrendRatio(List<_TD> td) {
     if (td.length < 2) return '';
@@ -927,27 +939,11 @@ List<_TD> get _cityDiseaseTrend {
     }).toList();
   }
 
-  List<_DG> get _diseaseGenderData {
-    final map = <String, int>{};
-
-    for (final r in _filtered) {
-      final disease = r['cause_of_death']?.toString().trim() ?? '';
-      final gender = r['gender']?.toString().trim() ?? '';
-      if (disease.isEmpty || gender.isEmpty) continue;
-
-      final key = '$disease|||$gender';
-      map[key] = (map[key] ?? 0) + 1;
-    }
-
-    final sorted = map.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    return sorted.take(30).map((e) {
-      final parts = e.key.split('|||');
-      return _DG(parts.first, parts.length > 1 ? parts[1] : '',
-          e.value.toDouble());
-    }).toList();
-  }
+  // NOTE (Improvement 1): the old `_diseaseGenderData` getter and its
+  // `_buildGenderDiseaseAnalysis()` chart ("Disease × Gender Association")
+  // have been intentionally removed — they duplicated "Gender by Disease"
+  // above. That space is now used for the new Mortality by District and
+  // Total Mortality by Year charts instead.
 
   // ═══════════════════════════════════════════════════════
   // ANALYTICAL INSIGHTS
@@ -987,11 +983,11 @@ List<_TD> get _cityDiseaseTrend {
     if (_diseaseComorbidityData.isNotEmpty) {
       final e = _diseaseComorbidityData.first;
       result.add(_Insight(
-        'Strongest Observed Combination',
+        'Strongest Observed Association',
         '${e.disease} appears with ${e.comorbidity} '
             'in ${e.count.toInt()} mortality records. '
-            'This is a high-frequency observed association '
-            'in the current dataset.',
+            'This is a high-frequency observed association in the current '
+            'dataset, not a measured risk factor.',
         _T.red,
         Icons.warning_amber_rounded,
       ));
@@ -1061,7 +1057,19 @@ List<_TD> get _cityDiseaseTrend {
       ));
     }
 
-    return result.take(6).toList();
+    if (_districtData.isNotEmpty) {
+      final e = _districtData.first;
+      result.add(_Insight(
+        'Highest-Burden District',
+        '${e.label} has the most recorded deaths '
+            '(${e.value.toInt()} of ${_filtered.length} filtered records, '
+            '${_percentage(e.value.toInt(), _filtered.length).toStringAsFixed(1)}%).',
+        _T.cyan,
+        Icons.map_rounded,
+      ));
+    }
+
+    return result.take(7).toList();
   }
 
   // ═══════════════════════════════════════════════════════
@@ -1336,7 +1344,52 @@ List<_TD> get _cityDiseaseTrend {
       );
 
   // ═══════════════════════════════════════════════════════
-  // BODY
+  // RECORD COUNT BANNER  (Improvement 7)
+  // Makes the sample size behind every chart impossible to miss —
+  // useful both for the reader and for thesis screenshots.
+  // ═══════════════════════════════════════════════════════
+
+  Widget _buildRecordCountBanner() {
+    final scoped = _filterLabel != 'All Areas · All Years';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: _T.accent.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _T.accent.withOpacity(0.35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.dataset_rounded, color: _T.accent, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(color: _T.sub, fontSize: 12),
+                children: [
+                  const TextSpan(text: 'Every chart below is based on '),
+                  TextSpan(
+                    text: '${_filtered.length} filtered mortality records',
+                    style: const TextStyle(
+                        color: _T.accent, fontWeight: FontWeight.bold),
+                  ),
+                  TextSpan(text: scoped ? ' ($_filterLabel).' : '.'),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // BODY — reorganized into a logical narrative:
+  // Overview → Basic distribution → Medical patterns →
+  // Demographic relationships → Environmental context →
+  // Temporal trends → Analytical findings.
   // ═══════════════════════════════════════════════════════
 
   Widget _buildBody() {
@@ -1349,48 +1402,72 @@ List<_TD> get _cityDiseaseTrend {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildRecordCountBanner(),
+
+          // ── A. OVERVIEW ──────────────────────────────
+          _sec('A · Overview'),
           _buildSummary(),
           const SizedBox(height: 24),
-          _sec('Mortality Analysis & Key Findings'),
-          _buildInsights(),
-          const SizedBox(height: 24),
-          _sec('Top Causes of Death'),
+
+          // ── B. BASIC MORTALITY DISTRIBUTION ──────────
+          _sec('B · Basic Mortality Distribution'),
           _responsiveRow([_buildCausesChart(), _buildAgeChart()]),
-          const SizedBox(height: 16),
-          _sec('Gender Analysis'),
-          _responsiveRow([_buildGenderPie(), _buildGenderByCause()]),
-          const SizedBox(height: 16),
-          _sec('Comorbidities & Place'),
-          _responsiveRow([_buildComorbid(), _buildPlace()]),
-          const SizedBox(height: 16),
-          _sec('Disease × Comorbidity Analysis'),
-          _buildDiseaseComorbidityChart(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+          _responsiveRow([_buildGenderPie(), _buildPlace()]),
+          const SizedBox(height: 14),
+          // Given full width on purpose — this is the new geographic
+          // chart called out as a project objective, so it gets room
+          // to show every district clearly.
+          _buildDistrictChart(),
+          const SizedBox(height: 24),
+
+          // ── C. MEDICAL PATTERN ANALYSIS ──────────────
+          _sec('C · Medical Pattern Analysis'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Text(
+              'Note: the charts below describe observed co-occurrence within '
+              'this dataset only — they are not calculated risk factors or '
+              'population-level incidence rates.',
+              style: const TextStyle(
+                  color: _T.muted, fontSize: 11, fontStyle: FontStyle.italic),
+            ),
+          ),
+          _responsiveRow([_buildComorbid(), _buildDiseaseComorbidityChart()]),
+          const SizedBox(height: 14),
           _buildDiseaseComorbidityHeatmap(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           _buildDiseaseCombinationTable(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           _buildComorbidityPairChart(),
-          const SizedBox(height: 16),
-          _sec('Age by Disease'),
-          _buildAgeDiseaseChart(),
-          const SizedBox(height: 16),
-          _buildDiseaseAgeChart(),
-          const SizedBox(height: 16),
-          _sec('Water Source — Lifestyle Factor'),
+          const SizedBox(height: 24),
+
+          // ── D. DEMOGRAPHIC RELATIONSHIPS ─────────────
+          _sec('D · Demographic Relationships'),
+          _buildGenderByCause(),
+          const SizedBox(height: 14),
+          _responsiveRow([_buildDiseaseAgeChart(), _buildAgeDiseaseChart()]),
+          const SizedBox(height: 24),
+
+          // ── E. ENVIRONMENTAL / CONTEXTUAL ANALYSIS ───
+          _sec('E · Environmental & Contextual Analysis'),
           _buildWaterChart(),
-          const SizedBox(height: 16),
-          _buildWaterDiseaseChart(),
-          const SizedBox(height: 16),
-          _buildPlaceDiseaseChart(),
-          const SizedBox(height: 16),
-          _buildGenderDiseaseAnalysis(),
+          const SizedBox(height: 14),
+          _responsiveRow([_buildWaterDiseaseChart(), _buildPlaceDiseaseChart()]),
           const SizedBox(height: 24),
-          _sec('Disease Trend by City / Year  ·  Localized Analysis'),
+
+          // ── F. TEMPORAL ANALYSIS ─────────────────────
+          _sec('F · Temporal Analysis'),
+          _buildYearlyMortalityChart(),
+          const SizedBox(height: 14),
           _buildCityDiseaseTrend(),
-          const SizedBox(height: 24),
-          _sec('Year-by-Year Global Trend (Top Diseases)'),
+          const SizedBox(height: 14),
           _buildGlobalTrend(),
+          const SizedBox(height: 24),
+
+          // ── G. ANALYTICAL FINDINGS ───────────────────
+          _sec('G · Analytical Findings'),
+          _buildInsights(),
           const SizedBox(height: 40),
         ],
       ),
@@ -1578,6 +1655,10 @@ List<_TD> get _cityDiseaseTrend {
         ),
       );
 
+  /// Two charts share one row on screens wider than 700px (laptop and up);
+  /// they stack vertically below that (tablet/mobile). This is the piece
+  /// that keeps a single chart from stretching edge-to-edge on a laptop —
+  /// used everywhere two related charts are shown together.
   Widget _responsiveRow(List<Widget> children) => LayoutBuilder(
         builder: (ctx, box) => box.maxWidth > 700
             ? Row(
@@ -1774,6 +1855,9 @@ List<_TD> get _cityDiseaseTrend {
         majorTickLines: const MajorTickLines(size: 0),
       );
 
+  // Improvement 6: every count-based chart shares this axis, which now
+  // carries an explicit "Number of Records" title so it's never ambiguous
+  // whether the y-axis is a count or something else.
   NumericAxis get _numAxis => NumericAxis(
         labelStyle: const TextStyle(color: _T.muted, fontSize: 10),
         axisLine: const AxisLine(color: _T.border),
@@ -1783,6 +1867,10 @@ List<_TD> get _cityDiseaseTrend {
           dashArray: const [4, 4],
         ),
         majorTickLines: const MajorTickLines(size: 0),
+        title: AxisTitle(
+          text: 'Number of Records',
+          textStyle: const TextStyle(color: _T.muted, fontSize: 10),
+        ),
       );
 
   TooltipBehavior get _tip => TooltipBehavior(
@@ -1794,7 +1882,7 @@ List<_TD> get _cityDiseaseTrend {
       );
 
   // ═══════════════════════════════════════════════════════
-  // 1. TOP CAUSES
+  // 1. TOP CAUSES  (percentage labels — Improvement 6)
   // ═══════════════════════════════════════════════════════
 
   Widget _buildCausesChart() {
@@ -1837,6 +1925,9 @@ List<_TD> get _cityDiseaseTrend {
             pointColorMapper: (d, i) => _T.palette[i % _T.palette.length],
             borderRadius: BorderRadius.circular(4),
             width: 0.6,
+            // Percentage shown on the bar itself (Improvement 6);
+            // exact count still available in the tooltip above.
+            dataLabelMapper: (d, _) => '${_percentage((d as _CD).value.toInt(), _filtered.length).toStringAsFixed(1)}%',
             dataLabelSettings: const DataLabelSettings(
               isVisible: true,
               labelAlignment: ChartDataLabelAlignment.outer,
@@ -1849,7 +1940,7 @@ List<_TD> get _cityDiseaseTrend {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 2. AGE DISTRIBUTION
+  // 2. AGE DISTRIBUTION  (count-based → keeps "Number of Records")
   // ═══════════════════════════════════════════════════════
 
   Widget _buildAgeChart() => _card(
@@ -1891,7 +1982,7 @@ List<_TD> get _cityDiseaseTrend {
       );
 
   // ═══════════════════════════════════════════════════════
-  // 3. GENDER PIE
+  // 3. GENDER PIE  (percentage labels — Improvement 6)
   // ═══════════════════════════════════════════════════════
 
   Widget _buildGenderPie() => _card(
@@ -1926,6 +2017,8 @@ List<_TD> get _cityDiseaseTrend {
               pointColorMapper: (d, _) => _T.genderColor(d.label),
               innerRadius: '55%',
               radius: '80%',
+              dataLabelMapper: (d, _) =>
+                  '${_percentage((d as _CD).value.toInt(), _filtered.length).toStringAsFixed(1)}%',
               dataLabelSettings: const DataLabelSettings(
                 isVisible: true,
                 textStyle:
@@ -1937,7 +2030,9 @@ List<_TD> get _cityDiseaseTrend {
       );
 
   // ═══════════════════════════════════════════════════════
-  // 4. GENDER BY CAUSE
+  // 4. GENDER BY CAUSE  (kept — the one Disease×Gender view we keep,
+  //    per Improvement 1; the duplicate "Disease × Gender Association"
+  //    chart that used to sit later on the page has been removed.)
   // ═══════════════════════════════════════════════════════
 
   Widget _buildGenderByCause() {
@@ -2000,53 +2095,63 @@ List<_TD> get _cityDiseaseTrend {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 5. COMORBIDITY
+  // 5. COMORBIDITY  (Improvement 5: pie → horizontal bar,
+  //    Improvement 6: percentage labels)
   // ═══════════════════════════════════════════════════════
 
-  Widget _buildComorbid() => _card(
-        title: 'Comorbidity Analysis',
-        badge: 'Comorbidity',
-        badgeColor: _T.red,
-        subtitle: 'Prior conditions among deceased',
-        child: _comorbidData.isEmpty
-            ? _empty('No comorbidity data available')
-            : SfCircularChart(
-                backgroundColor: Colors.transparent,
-                legend: Legend(
-                  isVisible: true,
-                  textStyle: const TextStyle(color: _T.sub, fontSize: 10),
-                  overflowMode: LegendItemOverflowMode.wrap,
-                  position: LegendPosition.bottom,
-                ),
-                tooltipBehavior: TooltipBehavior(
-                  enable: true,
-                  builder: (data, point, series, pointIndex, seriesIndex) {
-                    final d = data as _CD;
-                    return _tooltipCard([
-                      _tooltipTitle(d.label),
-                      _tooltipRow('Records', d.value.toInt().toString()),
-                      _tooltipRow('Share',
-                          '${_percentage(d.value.toInt(), _filtered.length).toStringAsFixed(1)}%'),
-                    ]);
-                  },
-                ),
-                series: [
-                  PieSeries<_CD, String>(
-                    dataSource: _comorbidData,
-                    xValueMapper: (d, _) => d.label,
-                    yValueMapper: (d, _) => d.value,
-                    pointColorMapper: (d, i) => _T.palette[i % _T.palette.length],
-                    explode: true,
-                    explodeIndex: 0,
-                    dataLabelSettings: const DataLabelSettings(
-                      isVisible: true,
-                      textStyle: TextStyle(color: _T.text, fontSize: 9),
-                      labelPosition: ChartDataLabelPosition.outside,
-                    ),
-                  ),
-                ],
+  Widget _buildComorbid() {
+    final w = MediaQuery.sizeOf(context).width;
+
+    return _card(
+      title: 'Comorbidity Analysis',
+      badge: 'Comorbidity',
+      badgeColor: _T.red,
+      subtitle: 'Prior conditions among deceased · tap a bar for details',
+      child: _comorbidData.isEmpty
+          ? _empty('No comorbidity data available')
+          : SfCartesianChart(
+              backgroundColor: Colors.transparent,
+              plotAreaBackgroundColor: Colors.transparent,
+              margin: EdgeInsets.zero,
+              primaryXAxis: CategoryAxis(
+                labelStyle: TextStyle(color: _T.muted, fontSize: _Break.axisLabelSize(w)),
+                axisLine: const AxisLine(color: _T.border),
+                majorGridLines: const MajorGridLines(width: 0),
+                majorTickLines: const MajorTickLines(size: 0),
               ),
-      );
+              primaryYAxis: _numAxis,
+              tooltipBehavior: TooltipBehavior(
+                enable: true,
+                builder: (data, point, series, pointIndex, seriesIndex) {
+                  final d = data as _CD;
+                  return _tooltipCard([
+                    _tooltipTitle(d.label, color: _T.red),
+                    _tooltipRow('Records', d.value.toInt().toString()),
+                    _tooltipRow('Share',
+                        '${_percentage(d.value.toInt(), _filtered.length).toStringAsFixed(1)}%'),
+                  ]);
+                },
+              ),
+              series: [
+                BarSeries<_CD, String>(
+                  dataSource: _comorbidData,
+                  xValueMapper: (d, _) => d.label,
+                  yValueMapper: (d, _) => d.value,
+                  pointColorMapper: (d, i) => _T.palette[i % _T.palette.length],
+                  borderRadius: BorderRadius.circular(4),
+                  width: 0.6,
+                  dataLabelMapper: (d, _) =>
+                      '${_percentage((d as _CD).value.toInt(), _filtered.length).toStringAsFixed(1)}%',
+                  dataLabelSettings: const DataLabelSettings(
+                    isVisible: true,
+                    labelAlignment: ChartDataLabelAlignment.outer,
+                    textStyle: TextStyle(color: _T.sub, fontSize: 9),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
 
   // ═══════════════════════════════════════════════════════
   // 6. PLACE OF DEATH
@@ -2091,7 +2196,66 @@ List<_TD> get _cityDiseaseTrend {
       );
 
   // ═══════════════════════════════════════════════════════
-  // 7. AGE BY DISEASE (average)
+  // 7. MORTALITY BY DISTRICT  — NEW (Improvement 2)
+  // ═══════════════════════════════════════════════════════
+
+  Widget _buildDistrictChart() {
+    final w = MediaQuery.sizeOf(context).width;
+
+    return _card(
+      title: 'Mortality by District',
+      badge: 'Geographic',
+      badgeColor: _T.cyan,
+      subtitle: 'Total recorded deaths per district · tap a bar for details',
+      child: _districtData.isEmpty
+          ? _empty('No district data available')
+          : SizedBox(
+              height: _Break.chartHeight(w),
+              child: SfCartesianChart(
+                backgroundColor: Colors.transparent,
+                plotAreaBackgroundColor: Colors.transparent,
+                margin: EdgeInsets.zero,
+                primaryXAxis: CategoryAxis(
+                  labelStyle: TextStyle(color: _T.muted, fontSize: _Break.axisLabelSize(w)),
+                  axisLine: const AxisLine(color: _T.border),
+                  majorGridLines: const MajorGridLines(width: 0),
+                  majorTickLines: const MajorTickLines(size: 0),
+                ),
+                primaryYAxis: _numAxis,
+                tooltipBehavior: TooltipBehavior(
+                  enable: true,
+                  builder: (data, point, series, pointIndex, seriesIndex) {
+                    final d = data as _CD;
+                    return _tooltipCard([
+                      _tooltipTitle(d.label, color: _T.cyan),
+                      _tooltipRow('Records', d.value.toInt().toString()),
+                      _tooltipRow('Share of filtered data',
+                          '${_percentage(d.value.toInt(), _filtered.length).toStringAsFixed(1)}%'),
+                    ]);
+                  },
+                ),
+                series: [
+                  BarSeries<_CD, String>(
+                    dataSource: _districtData,
+                    xValueMapper: (d, _) => d.label,
+                    yValueMapper: (d, _) => d.value,
+                    pointColorMapper: (d, i) => _T.palette[i % _T.palette.length],
+                    borderRadius: BorderRadius.circular(4),
+                    width: 0.6,
+                    dataLabelSettings: const DataLabelSettings(
+                      isVisible: true,
+                      labelAlignment: ChartDataLabelAlignment.outer,
+                      textStyle: TextStyle(color: _T.sub, fontSize: 9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // 8. AGE BY DISEASE (average)
   // ═══════════════════════════════════════════════════════
 
   Widget _buildAgeDiseaseChart() {
@@ -2156,7 +2320,7 @@ List<_TD> get _cityDiseaseTrend {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 8. WATER SOURCE
+  // 9. WATER SOURCE
   // ═══════════════════════════════════════════════════════
 
   Widget _buildWaterChart() => _card(
@@ -2246,7 +2410,7 @@ List<_TD> get _cityDiseaseTrend {
       );
 
   // ═══════════════════════════════════════════════════════
-  // 9. DISEASE × COMORBIDITY BAR
+  // 10. DISEASE × COMORBIDITY BAR  (renamed — Improvement 4)
   // ═══════════════════════════════════════════════════════
 
   Widget _buildDiseaseComorbidityChart() {
@@ -2255,7 +2419,7 @@ List<_TD> get _cityDiseaseTrend {
 
     if (data.isEmpty) {
       return _card(
-        title: 'Disease × Comorbidity Association',
+        title: 'Disease × Comorbidity — Observed Association',
         badge: 'Deep Analysis',
         badgeColor: _T.red,
         subtitle: 'Which prior conditions are observed with each cause of death',
@@ -2264,11 +2428,11 @@ List<_TD> get _cityDiseaseTrend {
     }
 
     return _card(
-      title: 'Disease × Comorbidity Association',
+      title: 'Disease × Comorbidity — Observed Association',
       badge: 'Deep Analysis',
       badgeColor: _T.red,
       subtitle:
-          'Top observed disease + comorbidity relationships · tap a bar for full names',
+          'Top observed disease + comorbidity pairs (not a measure of risk) · tap a bar for full names',
       child: SizedBox(
         height: _Break.chartHeight(w),
         child: SfCartesianChart(
@@ -2314,7 +2478,7 @@ List<_TD> get _cityDiseaseTrend {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 10. DISEASE × COMORBIDITY HEATMAP
+  // 11. DISEASE × COMORBIDITY HEATMAP
   // ═══════════════════════════════════════════════════════
 
   Widget _buildDiseaseComorbidityHeatmap() {
@@ -2461,7 +2625,8 @@ List<_TD> get _cityDiseaseTrend {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 11. DISEASE + COMORBIDITY COMBINATIONS
+  // 12. DISEASE + COMORBIDITY COMBINATIONS  (keeps % column —
+  //     Improvement 6)
   // ═══════════════════════════════════════════════════════
 
   Widget _buildDiseaseCombinationTable() {
@@ -2573,7 +2738,7 @@ List<_TD> get _cityDiseaseTrend {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 12. COMORBIDITY PAIRS
+  // 13. COMORBIDITY PAIRS
   // ═══════════════════════════════════════════════════════
 
   Widget _buildComorbidityPairChart() {
@@ -2633,7 +2798,7 @@ List<_TD> get _cityDiseaseTrend {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 13. DISEASE × AGE
+  // 14. DISEASE × AGE
   // ═══════════════════════════════════════════════════════
 
   Widget _buildDiseaseAgeChart() {
@@ -2700,7 +2865,7 @@ List<_TD> get _cityDiseaseTrend {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 14. WATER × DISEASE
+  // 15. WATER × DISEASE  (title clarified — Improvement 4)
   // ═══════════════════════════════════════════════════════
 
   Widget _buildWaterDiseaseChart() {
@@ -2708,7 +2873,7 @@ List<_TD> get _cityDiseaseTrend {
     final w = MediaQuery.sizeOf(context).width;
 
     return _card(
-      title: 'Disease × Water Source',
+      title: 'Disease × Water Source (Observed)',
       badge: 'Environmental',
       badgeColor: _T.accent,
       subtitle:
@@ -2759,7 +2924,7 @@ List<_TD> get _cityDiseaseTrend {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 15. PLACE × DISEASE
+  // 16. PLACE × DISEASE  (title clarified — Improvement 4)
   // ═══════════════════════════════════════════════════════
 
   Widget _buildPlaceDiseaseChart() {
@@ -2767,7 +2932,7 @@ List<_TD> get _cityDiseaseTrend {
     final w = MediaQuery.sizeOf(context).width;
 
     return _card(
-      title: 'Disease × Place of Death',
+      title: 'Disease × Place of Death (Observed)',
       badge: 'Location Analysis',
       badgeColor: _T.orange,
       subtitle:
@@ -2818,448 +2983,343 @@ List<_TD> get _cityDiseaseTrend {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 16. DISEASE × GENDER
+  // 17. TOTAL MORTALITY BY YEAR — NEW (Improvement 3)
   // ═══════════════════════════════════════════════════════
 
-  Widget _buildGenderDiseaseAnalysis() {
-    final data = _diseaseGenderData.take(15).toList();
-    final w = MediaQuery.sizeOf(context).width;
+  Widget _buildYearlyMortalityChart() {
+    final data = _yearlyMortalityTrend;
+
+    if (data.isEmpty) {
+      return _card(
+        title: 'Total Mortality by Year',
+        badge: 'Overall Trend',
+        badgeColor: _T.accent,
+        subtitle: 'Is overall mortality increasing or decreasing across years?',
+        child: _empty('Not enough year data'),
+      );
+    }
+
+    final isUp = data.length >= 2 && data.last.count > data.first.count;
 
     return _card(
-      title: 'Disease × Gender Association',
-      badge: 'Demographic',
-      badgeColor: _T.green,
+      title: 'Total Mortality by Year',
+      badge: 'Overall Trend',
+      badgeColor: _T.accent,
       subtitle:
-          'Observed mortality records by disease and gender · tap a bar for details',
-      trailing: _genderLegend(includeOther: true),
-      child: data.isEmpty
-          ? _empty('No disease/gender relationship available')
-          : SizedBox(
-              height: _Break.chartHeight(w),
-              child: SfCartesianChart(
-                backgroundColor: Colors.transparent,
-                plotAreaBackgroundColor: Colors.transparent,
-                margin: EdgeInsets.zero,
-                primaryXAxis: CategoryAxis(
-                  labelStyle: TextStyle(color: _T.muted, fontSize: _Break.axisLabelSize(w)),
-                  labelRotation: _Break.rotation(w).round(),
-                  axisLine: const AxisLine(color: _T.border),
-                  majorGridLines: const MajorGridLines(width: 0),
-                  majorTickLines: const MajorTickLines(size: 0),
-                ),
-                primaryYAxis: _numAxis,
-                tooltipBehavior: TooltipBehavior(
-                  enable: true,
-                  builder: (data, point, series, pointIndex, seriesIndex) {
-                    final d = data as _DG;
-                    return _tooltipCard([
-                      _tooltipTitle(d.disease, color: _T.genderColor(d.gender)),
-                      _tooltipRow('Gender', d.gender,
-                          valueColor: _T.genderColor(d.gender)),
-                      _tooltipRow('Records', d.count.toInt().toString()),
-                    ]);
-                  },
-                ),
-                series: [
-                  ColumnSeries<_DG, String>(
-                    dataSource: data,
-                    xValueMapper: (d, _) => _shorten('${d.disease} / ${d.gender}', 22),
-                    yValueMapper: (d, _) => d.count,
-                    pointColorMapper: (d, i) => _T.genderColor(d.gender),
-                    borderRadius: BorderRadius.circular(4),
-                    dataLabelSettings: const DataLabelSettings(
-                      isVisible: true,
-                      textStyle: TextStyle(color: _T.sub, fontSize: 8),
-                    ),
-                  ),
-                ],
+          'All causes combined — a different question than the disease-specific trends below',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (data.length >= 2)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _statPill(
+                'Overall direction',
+                isUp ? '↑ Rising' : '↓ Falling',
+                isUp ? _T.red : _T.green,
               ),
             ),
+          SfCartesianChart(
+            backgroundColor: Colors.transparent,
+            plotAreaBackgroundColor: Colors.transparent,
+            margin: EdgeInsets.zero,
+            primaryXAxis: _catAxis,
+            primaryYAxis: NumericAxis(
+              labelStyle: const TextStyle(color: _T.muted, fontSize: 10),
+              axisLine: const AxisLine(color: _T.border),
+              majorGridLines: MajorGridLines(
+                  color: _T.border.withOpacity(0.5), width: 0.5, dashArray: const [4, 4]),
+              majorTickLines: const MajorTickLines(size: 0),
+              title: AxisTitle(
+                  text: 'Total Deaths',
+                  textStyle: const TextStyle(color: _T.muted, fontSize: 10)),
+            ),
+            tooltipBehavior: TooltipBehavior(
+              enable: true,
+              color: _T.surface,
+              textStyle: const TextStyle(color: _T.text, fontSize: 11),
+              borderColor: _T.border,
+              borderWidth: 1,
+            ),
+            series: [
+              SplineAreaSeries<_TD, String>(
+                dataSource: data,
+                xValueMapper: (d, _) => d.year,
+                yValueMapper: (d, _) => d.count,
+                color: _T.accent.withOpacity(0.12),
+                borderColor: _T.accent,
+                borderWidth: 2.5,
+                splineType: SplineType.cardinal,
+                markerSettings: const MarkerSettings(
+                  isVisible: true,
+                  color: _T.accent,
+                  borderColor: _T.surface,
+                  borderWidth: 2,
+                  height: 8,
+                  width: 8,
+                ),
+                dataLabelSettings: const DataLabelSettings(
+                  isVisible: true,
+                  textStyle: TextStyle(color: _T.sub, fontSize: 10),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   // ═══════════════════════════════════════════════════════
-  // 17. CITY DISEASE TREND
+  // 18. CITY DISEASE TREND
   // ═══════════════════════════════════════════════════════
-Widget _buildCityDiseaseTrend() {
-  final td = _cityDiseaseTrend;
-  final ratio = _cityTrendRatio(td);
 
-  final loc = (_trendLocality ?? '').trim();
+  Widget _buildCityDiseaseTrend() {
+    final td = _cityDiseaseTrend;
+    final ratio = _cityTrendRatio(td);
 
-  final selectedDisease = _trendDisease == 'Other'
-      ? _trendOtherDiseaseCtrl.text.trim()
-      : (_trendDisease ?? '').trim();
+    final loc = (_trendLocality ?? '').trim();
 
-  final hasData = td.any((t) => t.count > 0);
+    final selectedDisease = _trendDisease == 'Other'
+        ? _trendOtherDiseaseCtrl.text.trim()
+        : (_trendDisease ?? '').trim();
 
-  final isUp =
-      td.length >= 2 && td.last.count > td.first.count;
+    final hasData = td.any((t) => t.count > 0);
 
-  final diseaseOptions = [
-    ..._allDiseases.where(
-      (d) => d.trim().toLowerCase() != 'other',
-    ),
-    'Other',
-  ];
+    final isUp = td.length >= 2 && td.last.count > td.first.count;
 
-  return _card(
-    title: 'Disease Trend by City / Year',
-    badge: 'Localized Trend',
-    badgeColor: _T.orange,
-    subtitle:
-        'Select a disease and specific locality to see year-by-year change',
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        LayoutBuilder(
-          builder: (ctx, box) {
-            final wide = box.maxWidth > _Break.mobile;
+    final diseaseOptions = [
+      ..._allDiseases.where((d) => d.trim().toLowerCase() != 'other'),
+      'Other',
+    ];
 
-            // ---------------------------------------------
-            // Disease dropdown
-            // ---------------------------------------------
-            final diseaseField =
-                DropdownButtonFormField<String>(
-              value: _trendDisease,
-              dropdownColor: _T.surface,
-              style: const TextStyle(
-                color: _T.text,
-                fontSize: 12,
-              ),
-              decoration: _deco('Select Disease'),
-              isExpanded: true,
-              items: diseaseOptions
-                  .map(
-                    (d) => DropdownMenuItem<String>(
-                      value: d,
-                      child: Text(
-                        d,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                setState(() {
-                  _trendDisease = v;
-
-                  // Clear custom disease whenever
-                  // a normal disease is selected.
-                  if (v != 'Other') {
-                    _trendOtherDiseaseCtrl.clear();
-                  }
-                });
-              },
-            );
-
-            // ---------------------------------------------
-            // Other disease text field
-            // ---------------------------------------------
-            final otherDiseaseField =
-                _trendDisease == 'Other'
-                    ? Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: TextFormField(
-                          controller: _trendOtherDiseaseCtrl,
-                          style: const TextStyle(
-                            color: _T.text,
-                            fontSize: 12,
-                          ),
-                          decoration:
-                              _deco('Enter disease name…'),
-                          textInputAction:
-                              TextInputAction.done,
-                          onChanged: (_) {
-                            setState(() {});
-                          },
-                        ),
-                      )
-                    : const SizedBox.shrink();
-
-            // ---------------------------------------------
-            // Specific locality dropdown
-            // ---------------------------------------------
-            final localityField =
-                DropdownButtonFormField<String>(
-              value: _trendLocality,
-              dropdownColor: _T.surface,
-              style: const TextStyle(
-                color: _T.text,
-                fontSize: 12,
-              ),
-              decoration:
-                  _deco('Select City / Village'),
-              isExpanded: true,
-              items: [
-                const DropdownMenuItem<String>(
-                  value: null,
-                  child: Text(
-                    'All Localities',
-                    style: TextStyle(
-                      color: _T.muted,
-                    ),
-                  ),
-                ),
-                ..._trendLocalities.map(
-                  (locality) =>
-                      DropdownMenuItem<String>(
-                    value: locality,
-                    child: Text(
-                      locality,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _trendLocality = value;
-                });
-              },
-            );
-
-            // ---------------------------------------------
-            // Responsive layout
-            // ---------------------------------------------
-            if (wide) {
-              return Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: diseaseField,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: localityField,
-                      ),
-                    ],
-                  ),
-                  otherDiseaseField,
-                ],
-              );
-            }
-
-            return Column(
-              children: [
-                diseaseField,
-                const SizedBox(height: 10),
-                localityField,
-                otherDiseaseField,
-              ],
-            );
-          },
-        ),
-
-        const SizedBox(height: 16),
-
-        // -----------------------------------------------
-        // Statistics
-        // -----------------------------------------------
-        if (td.length >= 2 && hasData) ...[
+    return _card(
+      title: 'Disease Trend by City / Year',
+      badge: 'Localized Trend',
+      badgeColor: _T.orange,
+      subtitle:
+          'Select a disease and specific locality to see year-by-year change',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           LayoutBuilder(
             builder: (ctx, box) {
-              final narrow = box.maxWidth < 480;
+              final wide = box.maxWidth > _Break.mobile;
 
-              final pills = [
-                _statPill(
-                  'Change',
-                  ratio,
-                  isUp ? _T.red : _T.green,
-                ),
-                _statPill(
-                  'Peak Year',
-                  td
-                      .reduce(
-                        (a, b) =>
-                            a.count > b.count ? a : b,
-                      )
-                      .year,
-                  _T.accent,
-                ),
-                _statPill(
-                  'Latest (${_years.isNotEmpty ? _years.last : "—"})',
-                  '${td.isEmpty ? 0 : td.last.count.toInt()} deaths',
-                  isUp ? _T.red : _T.green,
-                ),
-              ];
+              final diseaseField = DropdownButtonFormField<String>(
+                value: _trendDisease,
+                dropdownColor: _T.surface,
+                style: const TextStyle(color: _T.text, fontSize: 12),
+                decoration: _deco('Select Disease'),
+                isExpanded: true,
+                items: diseaseOptions
+                    .map((d) => DropdownMenuItem<String>(
+                          value: d,
+                          child: Text(d, overflow: TextOverflow.ellipsis),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  setState(() {
+                    _trendDisease = v;
+                    if (v != 'Other') {
+                      _trendOtherDiseaseCtrl.clear();
+                    }
+                  });
+                },
+              );
 
-              if (narrow) {
+              final otherDiseaseField = _trendDisease == 'Other'
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: TextFormField(
+                        controller: _trendOtherDiseaseCtrl,
+                        style: const TextStyle(color: _T.text, fontSize: 12),
+                        decoration: _deco('Enter disease name…'),
+                        textInputAction: TextInputAction.done,
+                        onChanged: (_) {
+                          setState(() {});
+                        },
+                      ),
+                    )
+                  : const SizedBox.shrink();
+
+              final localityField = DropdownButtonFormField<String>(
+                value: _trendLocality,
+                dropdownColor: _T.surface,
+                style: const TextStyle(color: _T.text, fontSize: 12),
+                decoration: _deco('Select City / Village'),
+                isExpanded: true,
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('All Localities', style: TextStyle(color: _T.muted)),
+                  ),
+                  ..._trendLocalities.map(
+                    (locality) => DropdownMenuItem<String>(
+                      value: locality,
+                      child: Text(locality, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _trendLocality = value;
+                  });
+                },
+              );
+
+              if (wide) {
                 return Column(
-                  children: pills
-                      .map(
-                        (p) => Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: 8),
-                          child: p,
-                        ),
-                      )
-                      .toList(),
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: diseaseField),
+                        const SizedBox(width: 12),
+                        Expanded(child: localityField),
+                      ],
+                    ),
+                    otherDiseaseField,
+                  ],
                 );
               }
 
-              return Row(
+              return Column(
                 children: [
-                  for (int i = 0;
-                      i < pills.length;
-                      i++) ...[
-                    pills[i],
-                    if (i != pills.length - 1)
-                      const SizedBox(width: 10),
-                  ],
+                  diseaseField,
+                  const SizedBox(height: 10),
+                  localityField,
+                  otherDiseaseField,
                 ],
               );
             },
           ),
-          const SizedBox(height: 14),
-        ],
+          const SizedBox(height: 16),
+          if (td.length >= 2 && hasData) ...[
+            LayoutBuilder(
+              builder: (ctx, box) {
+                final narrow = box.maxWidth < 480;
 
-        // -----------------------------------------------
-        // Current selection label
-        // -----------------------------------------------
-        if (selectedDisease.isNotEmpty &&
-            loc.isNotEmpty)
-          Padding(
-            padding:
-                const EdgeInsets.only(bottom: 10),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.place_rounded,
-                  size: 13,
-                  color: _T.orange,
-                ),
-                const SizedBox(width: 5),
-                Flexible(
-                  child: Text(
-                    'Showing: $selectedDisease in "$loc"',
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _T.orange,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
+                final pills = [
+                  _statPill('Change', ratio, isUp ? _T.red : _T.green),
+                  _statPill(
+                    'Peak Year',
+                    td.reduce((a, b) => a.count > b.count ? a : b).year,
+                    _T.accent,
                   ),
-                ),
-              ],
-            ),
-          )
-        else if (selectedDisease.isNotEmpty)
-          Padding(
-            padding:
-                const EdgeInsets.only(bottom: 10),
-            child: Text(
-              'Showing all localities for $selectedDisease · select a city / village above to localize',
-              style: const TextStyle(
-                color: _T.muted,
-                fontSize: 11,
-              ),
-            ),
-          ),
+                  _statPill(
+                    'Latest (${_years.isNotEmpty ? _years.last : "—"})',
+                    '${td.isEmpty ? 0 : td.last.count.toInt()} deaths',
+                    isUp ? _T.red : _T.green,
+                  ),
+                ];
 
-        // -----------------------------------------------
-        // Empty state
-        // -----------------------------------------------
-        !hasData &&
-                selectedDisease.isNotEmpty
-            ? _empty(
-                loc.isNotEmpty
-                    ? 'No data for "$selectedDisease" in "$loc"'
-                    : 'No data found for "$selectedDisease"',
-              )
-            : SfCartesianChart(
-                backgroundColor: Colors.transparent,
-                plotAreaBackgroundColor:
-                    Colors.transparent,
-                margin: EdgeInsets.zero,
-                primaryXAxis: _catAxis,
-                primaryYAxis: NumericAxis(
-                  labelStyle:
-                      const TextStyle(
-                    color: _T.muted,
-                    fontSize: 10,
-                  ),
-                  axisLine:
-                      const AxisLine(
-                    color: _T.border,
-                  ),
-                  majorGridLines:
-                      MajorGridLines(
-                    color:
-                        _T.border.withOpacity(0.5),
-                    width: 0.5,
-                    dashArray: const [4, 4],
-                  ),
-                  majorTickLines:
-                      const MajorTickLines(size: 0),
-                  title: AxisTitle(
-                    text: 'Deaths per year',
-                    textStyle:
-                        const TextStyle(
-                      color: _T.muted,
-                      fontSize: 10,
-                    ),
-                  ),
-                ),
-                tooltipBehavior:
-                    TooltipBehavior(
-                  enable: true,
-                  header: selectedDisease,
-                  color: _T.surface,
-                  textStyle:
-                      const TextStyle(
-                    color: _T.text,
-                    fontSize: 11,
-                  ),
-                  borderColor: _T.border,
-                  borderWidth: 1,
-                ),
-                series: [
-                  SplineAreaSeries<_TD, String>(
-                    dataSource: td,
-                    xValueMapper: (d, _) =>
-                        d.year,
-                    yValueMapper: (d, _) =>
-                        d.count,
-                    color: _T.orange
-                        .withOpacity(0.12),
-                    borderColor: _T.orange,
-                    borderWidth: 2.5,
-                    splineType:
-                        SplineType.cardinal,
-                    markerSettings:
-                        const MarkerSettings(
-                      isVisible: true,
-                      color: _T.orange,
-                      borderColor:
-                          _T.surface,
-                      borderWidth: 2,
-                      height: 8,
-                      width: 8,
-                    ),
-                    dataLabelSettings:
-                        const DataLabelSettings(
-                      isVisible: true,
-                      textStyle:
-                          TextStyle(
-                        color: _T.sub,
-                        fontSize: 10,
-                      ),
+                if (narrow) {
+                  return Column(
+                    children: pills
+                        .map((p) => Padding(padding: const EdgeInsets.only(bottom: 8), child: p))
+                        .toList(),
+                  );
+                }
+
+                return Row(
+                  children: [
+                    for (int i = 0; i < pills.length; i++) ...[
+                      pills[i],
+                      if (i != pills.length - 1) const SizedBox(width: 10),
+                    ],
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (selectedDisease.isNotEmpty && loc.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.place_rounded, size: 13, color: _T.orange),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      'Showing: $selectedDisease in "$loc"',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: _T.orange, fontSize: 12, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
               ),
-      ],
-    ),
-  );
-}
-
-
-
-
-
-
+            )
+          else if (selectedDisease.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(
+                'Showing all localities for $selectedDisease · select a city / village above to localize',
+                style: const TextStyle(color: _T.muted, fontSize: 11),
+              ),
+            ),
+          !hasData && selectedDisease.isNotEmpty
+              ? _empty(
+                  loc.isNotEmpty
+                      ? 'No data for "$selectedDisease" in "$loc"'
+                      : 'No data found for "$selectedDisease"',
+                )
+              : SfCartesianChart(
+                  backgroundColor: Colors.transparent,
+                  plotAreaBackgroundColor: Colors.transparent,
+                  margin: EdgeInsets.zero,
+                  primaryXAxis: _catAxis,
+                  primaryYAxis: NumericAxis(
+                    labelStyle: const TextStyle(color: _T.muted, fontSize: 10),
+                    axisLine: const AxisLine(color: _T.border),
+                    majorGridLines: MajorGridLines(
+                      color: _T.border.withOpacity(0.5),
+                      width: 0.5,
+                      dashArray: const [4, 4],
+                    ),
+                    majorTickLines: const MajorTickLines(size: 0),
+                    title: AxisTitle(
+                      text: 'Deaths per year',
+                      textStyle: const TextStyle(color: _T.muted, fontSize: 10),
+                    ),
+                  ),
+                  tooltipBehavior: TooltipBehavior(
+                    enable: true,
+                    header: selectedDisease,
+                    color: _T.surface,
+                    textStyle: const TextStyle(color: _T.text, fontSize: 11),
+                    borderColor: _T.border,
+                    borderWidth: 1,
+                  ),
+                  series: [
+                    SplineAreaSeries<_TD, String>(
+                      dataSource: td,
+                      xValueMapper: (d, _) => d.year,
+                      yValueMapper: (d, _) => d.count,
+                      color: _T.orange.withOpacity(0.12),
+                      borderColor: _T.orange,
+                      borderWidth: 2.5,
+                      splineType: SplineType.cardinal,
+                      markerSettings: const MarkerSettings(
+                        isVisible: true,
+                        color: _T.orange,
+                        borderColor: _T.surface,
+                        borderWidth: 2,
+                        height: 8,
+                        width: 8,
+                      ),
+                      dataLabelSettings: const DataLabelSettings(
+                        isVisible: true,
+                        textStyle: TextStyle(color: _T.sub, fontSize: 10),
+                      ),
+                    ),
+                  ],
+                ),
+        ],
+      ),
+    );
+  }
 
   Widget _statPill(String label, String value, Color color) => Expanded(
         child: Container(
@@ -3284,7 +3344,7 @@ Widget _buildCityDiseaseTrend() {
       );
 
   // ═══════════════════════════════════════════════════════
-  // 18. GLOBAL TREND
+  // 19. GLOBAL TREND
   // ═══════════════════════════════════════════════════════
 
   Widget _buildGlobalTrend() {
@@ -3314,10 +3374,11 @@ Widget _buildCityDiseaseTrend() {
         .toList();
 
     return _card(
-      title: 'Year-by-Year Global Trend',
+      title: 'Year-by-Year Global Trend (Top Diseases)',
       badge: 'Multi-Disease',
       badgeColor: _T.purple,
-      subtitle: 'Top ${_topDiseases.length} diseases over time · filtered by $_filterLabel',
+      subtitle:
+          'Top ${_topDiseases.length} diseases over time · filtered by $_filterLabel · complements the overall trend above',
       child: SfCartesianChart(
         backgroundColor: Colors.transparent,
         plotAreaBackgroundColor: Colors.transparent,
