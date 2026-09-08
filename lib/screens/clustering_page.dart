@@ -7,6 +7,8 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 //  THEME
 // ═══════════════════════════════════════════════════════
 class _T {
+  // Dark theme — deep slate background with slightly lighter card
+  // surfaces, and saturated accent colors that pop against the dark bg.
   static const bg      = Color(0xFF0F172A);
   static const surface = Color(0xFF1E293B);
   static const border  = Color(0xFF334155);
@@ -541,8 +543,7 @@ List<List<double>> centroids = List.generate(k, (i) {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            // ignore: deprecated_member_use
-            color: _T.purple.withOpacity(0.1),
+            color: _T.purple.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(999),
             border: Border.all(color: _T.purple.withValues(alpha: 0.3)),
           ),
@@ -615,31 +616,40 @@ List<List<double>> centroids = List.generate(k, (i) {
       _clusterCards(),
       const SizedBox(height: 24),
 
-      // Scatter plot
-      _sec('Scatter Plot — Mortality Rate vs Healthcare Access'),
-      _scatterPlot(),
+      // Scatter plot + stats table share one row on laptop screens
+      _sec('Cluster Visualization & Statistics'),
+      _responsiveRow([_scatterPlot(), _statsTable()]),
       const SizedBox(height: 24),
 
-      // Stats table
-      _sec('Cluster Statistics Table'),
-      _statsTable(),
-      const SizedBox(height: 24),
-
-      // Feature comparison
-      _sec('Feature Comparison Across Clusters'),
-      _featureComparison(),
+      // Feature comparison + water quality share one row on laptop screens
+      _sec('Feature & Water Quality Comparison'),
+      _responsiveRow([_featureComparison(), _waterByCluster()]),
       const SizedBox(height: 24),
 
       // Top localities per cluster
       _sec('Top Localities per Cluster'),
       _topLocalitiesPerCluster(),
-      const SizedBox(height: 24),
-
-      // Water score chart
-      _sec('Water Source Quality by Cluster'),
-      _waterByCluster(),
       const SizedBox(height: 40),
     ]),
+  );
+
+  /// Places two related cards side by side once there's genuinely enough
+  /// width for both to breathe (laptop screens and up), and stacks them
+  /// on tablet/phone so nothing gets squeezed or cut off.
+  Widget _responsiveRow(List<Widget> children) => LayoutBuilder(
+    builder: (ctx, box) => box.maxWidth > 900
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: children
+                .map((c) => Expanded(
+                    child: Padding(padding: const EdgeInsets.only(right: 14), child: c)))
+                .toList(),
+          )
+        : Column(
+            children: children
+                .map((c) => Padding(padding: const EdgeInsets.only(bottom: 14), child: c))
+                .toList(),
+          ),
   );
 
   // ─────────────────────────────────────────────
@@ -736,9 +746,9 @@ List<List<double>> centroids = List.generate(k, (i) {
     return Container(
       decoration: BoxDecoration(
         color: _T.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 16, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.15), blurRadius: 18, offset: const Offset(0, 6))],
       ),
       padding: const EdgeInsets.all(18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1146,9 +1156,9 @@ List<List<double>> centroids = List.generate(k, (i) {
       Container(
         margin: const EdgeInsets.only(bottom: 4),
         decoration: BoxDecoration(
-          color: _T.surface, borderRadius: BorderRadius.circular(14),
+          color: _T.surface, borderRadius: BorderRadius.circular(16),
           border: Border.all(color: _T.border),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 12, offset: const Offset(0, 4))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 14, offset: const Offset(0, 4))],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Container(

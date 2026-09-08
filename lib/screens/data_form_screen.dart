@@ -881,7 +881,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
               icon: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
@@ -1331,8 +1331,8 @@ class _DataFormScreenState extends State<DataFormScreen> {
                                 BorderRadius.circular(14),
                             border: Border.all(
                               color: selectedDate == null
-                                  ? red.withOpacity(0.3)
-                                  : accent.withOpacity(0.3),
+                                  ? red.withValues(alpha: 0.3)
+                                  : accent.withValues(alpha: 0.3),
                               width: 2,
                             ),
                           ),
@@ -1455,7 +1455,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
+                                    color: Colors.white.withValues(alpha: 0.2),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: const Icon(
@@ -1516,7 +1516,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: primary.withOpacity(0.25),
+            color: primary.withValues(alpha: 0.25),
             blurRadius: 30,
             offset: const Offset(0, 10),
           ),
@@ -1535,7 +1535,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.white.withOpacity(0.15),
+                  color: Colors.white.withValues(alpha: 0.15),
                   blurRadius: 20,
                   offset: const Offset(0, 4),
                 ),
@@ -1565,7 +1565,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
                 Text(
                   "Enter accurate information for mortality analysis and reporting.",
                   style: GoogleFonts.poppins(
-                    color: Colors.white.withOpacity(0.85),
+                    color: Colors.white.withValues(alpha: 0.85),
                     fontSize: 12,
                     height: 1.5,
                     letterSpacing: 0.3,
@@ -1602,7 +1602,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: cardShadow.withOpacity(0.06),
+            color: cardShadow.withValues(alpha: 0.06),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -1620,14 +1620,14 @@ class _DataFormScreenState extends State<DataFormScreen> {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [color, color.withOpacity(0.7)],
+                      colors: [color, color.withValues(alpha: 0.7)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: color.withOpacity(0.2),
+                        color: color.withValues(alpha: 0.2),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
@@ -1671,7 +1671,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
           ),
           Divider(
             height: 1,
-            color: border.withOpacity(0.5),
+            color: border.withValues(alpha: 0.5),
           ),
           // CONTENT
           Padding(
@@ -1727,7 +1727,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: border.withOpacity(0.6)),
+        borderSide: BorderSide(color: border.withValues(alpha: 0.6)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -1815,7 +1815,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: border.withOpacity(0.6)),
+          borderSide: BorderSide(color: border.withValues(alpha: 0.6)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -1827,7 +1827,7 @@ class _DataFormScreenState extends State<DataFormScreen> {
         disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(
-            color: border.withOpacity(0.3),
+            color: border.withValues(alpha: 0.3),
           ),
         ),
       ),
@@ -1891,14 +1891,14 @@ class _DataFormScreenState extends State<DataFormScreen> {
         gradient: LinearGradient(
           colors: [
             greenLight,
-            greenLight.withOpacity(0.5),
+            greenLight.withValues(alpha: 0.5),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: green.withOpacity(0.3),
+          color: green.withValues(alpha: 0.3),
           width: 1.5,
         ),
       ),
