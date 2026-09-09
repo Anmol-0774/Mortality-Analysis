@@ -1,15 +1,25 @@
 // ignore_for_file: use_super_parameters
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'data_form_screen.dart';
 import 'signup_screen.dart';
+import 'dashboard_screen.dart';
+import 'web_dashboard_screen.dart';
 
 // ═══════════════════════════════════════════════════════
 //  FIELD WORKER LOGIN — this is the ONLY login shown when
 //  the app opens normally. Admin login lives on its own
 //  separate route (see admin_login_screen.dart) and is
 //  never linked from here.
+//
+//  UPDATE: this screen now also supports admins logging in
+//  through the SAME form. After Supabase authenticates the
+//  user, we check their `role` in the `profiles` table and
+//  redirect accordingly. This is the professional pattern —
+//  no hidden URL needed, and it works identically on web
+//  and mobile.
 // ═══════════════════════════════════════════════════════
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -43,16 +53,36 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (response.session != null) {
-        final loggedInEmail = response.user!.email!.toLowerCase();
+        final userId = response.user!.id;
 
-        // اگر ایڈمن غلطی سے یہاں سے لاگ ان کرنے کی کوشش کرے تو اسے بلاک کریں
-        if (loggedInEmail == 'admin@mortality.com') {
-          await Supabase.instance.client.auth.signOut();
-          _showSnackBar(
-            "Access Denied: Admins must use the dedicated Admin Panel URL.",
-            Colors.red,
+        // Fetch role from the profiles table
+        String? role;
+        try {
+          final profile = await Supabase.instance.client
+              .from('profiles')
+              .select('role')
+              .eq('id', userId)
+              .single();
+          role = profile['role'] as String?;
+        } catch (e) {
+          // Table/column missing or no profile row found for this user.
+          role = null;
+        }
+
+        if (!mounted) return;
+
+        if (role == 'admin') {
+          // Role says admin -> go straight to admin dashboard
+          // (matches the same web/mobile split used in main.dart's getHomeScreen)
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  kIsWeb ? WebDashboardScreen() : const DashboardScreen(),
+            ),
           );
         } else {
+          // Normal worker path (unchanged)
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const DataFormScreen()),

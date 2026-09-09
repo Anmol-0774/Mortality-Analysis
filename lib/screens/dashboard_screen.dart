@@ -60,7 +60,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ..setBackgroundColor(Colors.transparent)
         ..setNavigationDelegate(NavigationDelegate(
           onPageFinished: (_) => setState(() => _webViewLoading = false),
-        ))
+        )) 
         ..loadHtmlString(html);
       setState(() {});
     } catch (e) {

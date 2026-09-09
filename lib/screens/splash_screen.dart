@@ -12,18 +12,27 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
   @override
- @override
-void initState() {
-  super.initState();
-  // Wait 3 seconds, then evaluate authentication routing automatically
-  Timer(const Duration(seconds: 3), () {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => MyApp.getHomeScreen(), // Calls your session manager from main.dart
-      ),
-    );
-  });
-}
+  void initState() {
+    super.initState();
+    // Wait 3 seconds, then evaluate authentication routing automatically
+    Timer(const Duration(seconds: 3), () async {
+      // UPDATE: getHomeScreen() is now async (it looks up the user's
+      // role from Supabase), so we must await the Widget it resolves
+      // to before handing it to MaterialPageRoute. Passing the Future
+      // itself into `builder` would crash, since builder expects a
+      // Widget, not a Future<Widget>.
+      final homeScreen = await MyApp.getHomeScreen();
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => homeScreen,
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

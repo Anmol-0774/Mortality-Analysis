@@ -7,7 +7,6 @@ import 'package:mortality_analysis/screens/splash_screen.dart';
 import 'package:mortality_analysis/screens/dashboard_screen.dart';
 import 'package:mortality_analysis/screens/data_form_screen.dart';
 import 'package:mortality_analysis/screens/login_screen.dart';
-import 'package:mortality_analysis/screens/admin_login_screen.dart';
  // 1. Imported your splash screen file
 
 Future<void> main() async {
@@ -28,19 +27,43 @@ Future<void> main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // Keep this public/accessible so your splash screen can call it to find the next page
-  static Widget getHomeScreen() {
+  // UPDATE: now async, because it looks up the user's role from the
+  // `profiles` table instead of matching a hardcoded email. This means
+  // a worker account and an admin account both go through the SAME
+  // login screen, and this function figures out where to send them —
+  // no separate secret URL required for admin access to work.
+  //
+  // IMPORTANT: since this is now a Future<Widget>, whatever calls
+  // getHomeScreen() (your SplashScreen) must `await` it. Paste
+  // splash_screen.dart and I'll update that too.
+  static Future<Widget> getHomeScreen() async {
     final session = Supabase.instance.client.auth.currentSession;
 
     if (session == null) {
       return const LoginScreen();
     }
 
+    final userId = session.user.id;
     final userEmail = session.user.email;
 
-    final isAdmin =
-        userEmail != null &&
-        userEmail.toLowerCase() == 'admin@mortality.com';
+    // ── NEW: check role from the profiles table ──────────────
+    String? role;
+    try {
+      final profile = await Supabase.instance.client
+          .from('profiles')
+          .select('role')
+          .eq('id', userId)
+          .single();
+      role = profile['role'] as String?;
+    } catch (e) {
+      // Table/column missing or row not found — fall back to null,
+      // which is handled below via the old hardcoded-email check.
+      role = null;
+    }
+
+    final isAdmin = role == 'admin' ||
+        (userEmail != null &&
+            userEmail.toLowerCase() == 'admin@mortality.com');
 
     if (isAdmin) {
       if (kIsWeb) {
@@ -63,13 +86,9 @@ class MyApp extends StatelessWidget {
       ),
       // 2. Splash screen is the initial landing screen for the normal '/' route
       home: const SplashScreen(),
-      // 3. Separate named route for the Admin Panel — NOT linked from the
-      // worker LoginScreen anywhere. Reach it directly:
-      //   - Web: https://yourapp.com/#/admin-panel
-      //   - In-app: Navigator.pushNamed(context, '/admin-panel')
-      routes: {
-        '/admin-panel': (context) => const AdminLoginScreen(),
-      },
+      // 3. No separate admin route needed anymore — admin access now goes
+      // through the same LoginScreen, and getHomeScreen() above sends
+      // admins to the right dashboard based on their `role`.
     );
   }
 }

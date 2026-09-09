@@ -10,6 +10,7 @@
 analyzer:
   errors:
     duplicate_import: ignore
+    unused_field: ignore
 include: package:flutter_lints/flutter.yaml
 
 linter:

@@ -325,12 +325,9 @@ Future<void> _loadData() async {
   // ═══════════════════════════════════════════════════════
   // BUILD REPORT TEXT
   // ═══════════════════════════════════════════════════════
-
   String _buildReportText({required String type}) {
     final now = DateTime.now();
-
     final buffer = StringBuffer();
-
     buffer.writeln('═══════════════════════════════════════════════');
     buffer.writeln('       MORTALITY ANALYSIS SYSTEM');
     buffer.writeln('       $type');

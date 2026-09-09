@@ -1927,7 +1927,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             width: 0.6,
             // Percentage shown on the bar itself (Improvement 6);
             // exact count still available in the tooltip above.
-            dataLabelMapper: (d, _) => '${_percentage((d as _CD).value.toInt(), _filtered.length).toStringAsFixed(1)}%',
+            dataLabelMapper: (d, _) => '${_percentage((d).value.toInt(), _filtered.length).toStringAsFixed(1)}%',
             dataLabelSettings: const DataLabelSettings(
               isVisible: true,
               labelAlignment: ChartDataLabelAlignment.outer,
@@ -2018,7 +2018,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               innerRadius: '55%',
               radius: '80%',
               dataLabelMapper: (d, _) =>
-                  '${_percentage((d as _CD).value.toInt(), _filtered.length).toStringAsFixed(1)}%',
+                  '${_percentage((d).value.toInt(), _filtered.length).toStringAsFixed(1)}%',
               dataLabelSettings: const DataLabelSettings(
                 isVisible: true,
                 textStyle:
@@ -2141,7 +2141,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   borderRadius: BorderRadius.circular(4),
                   width: 0.6,
                   dataLabelMapper: (d, _) =>
-                      '${_percentage((d as _CD).value.toInt(), _filtered.length).toStringAsFixed(1)}%',
+                      '${_percentage((d).value.toInt(), _filtered.length).toStringAsFixed(1)}%',
                   dataLabelSettings: const DataLabelSettings(
                     isVisible: true,
                     labelAlignment: ChartDataLabelAlignment.outer,
