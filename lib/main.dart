@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:mortality_analysis/screens/web_dashboard_screen.dart';
+import 'package:mortality_analysis/screens/dashboard_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mortality_analysis/screens/splash_screen.dart';
 import 'package:mortality_analysis/screens/dashboard_screen.dart';
@@ -44,9 +44,8 @@ class MyApp extends StatelessWidget {
     }
 
     final userId = session.user.id;
-    final userEmail = session.user.email;
 
-    // ── NEW: check role from the profiles table ──────────────
+    // Check role from the profiles table
     String? role;
     try {
       final profile = await Supabase.instance.client
@@ -56,18 +55,13 @@ class MyApp extends StatelessWidget {
           .single();
       role = profile['role'] as String?;
     } catch (e) {
-      // Table/column missing or row not found — fall back to null,
-      // which is handled below via the old hardcoded-email check.
+      // Table/column missing or no profile row found for this user.
       role = null;
     }
 
-    final isAdmin = role == 'admin' ||
-        (userEmail != null &&
-            userEmail.toLowerCase() == 'admin@mortality.com');
-
-    if (isAdmin) {
+    if (role == 'admin') {
       if (kIsWeb) {
-        return WebDashboardScreen();
+        return DashboardScreen();
       }
       return const DashboardScreen();
     }
